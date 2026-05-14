@@ -4,12 +4,12 @@ import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAJhCQgGbGQfhHGCfeaOP0iXjStwNHobes",
-  authDomain: "collegeevent-db8a5.firebaseapp.com",
-  projectId: "collegeevent-db8a5",
-  storageBucket: "collegeevent-db8a5.firebasestorage.app",
-  messagingSenderId: "953620328823",
-  appId: "1:953620328823:web:05388f47fa314c5ed8f172"
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 const app = initializeApp(firebaseConfig);
