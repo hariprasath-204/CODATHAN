@@ -112,7 +112,10 @@ export const resetCompiler = () => {
 //  This gives you UNLIMITED compilations with NO rate limits!
 // ════════════════════════════════════════════════════════════════════════════
 const PISTON_LANG = {
-  "c++":  { language: "c++",  version: "*" },
+  "c":      { language: "c",      version: "*" },
+  "c++":    { language: "c++",    version: "*" },
+  "java":   { language: "java",   version: "*" },
+  "python": { language: "python", version: "*" },
 };
 
 const runPiston = async (code, language, stdin, baseUrl = "https://emkc.org") => {
@@ -145,7 +148,12 @@ const runPiston = async (code, language, stdin, baseUrl = "https://emkc.org") =>
 // ════════════════════════════════════════════════════════════════════════════
 //  PROVIDER 2 — Wandbox (with key rotation)
 // ════════════════════════════════════════════════════════════════════════════
-const WANDBOX_COMPILER = { "c++": "gcc-head" };
+const WANDBOX_COMPILER = {
+  "c":      "gcc-head-c",
+  "c++":    "gcc-head",
+  "java":   "openjdk-jdk-22+36",
+  "python": "cpython-3.14.0",
+};
 
 const runWandbox = async (code, language, stdin) => {
   const compiler = WANDBOX_COMPILER[language];
@@ -184,7 +192,12 @@ const runWandbox = async (code, language, stdin) => {
 // ════════════════════════════════════════════════════════════════════════════
 //  PROVIDER 3 — Judge0 via RapidAPI
 // ════════════════════════════════════════════════════════════════════════════
-const JUDGE0_LANG_ID  = { "c++": 54 };
+const JUDGE0_LANG_ID  = {
+  "c":      50,
+  "c++":    54,
+  "java":   62,
+  "python": 71,
+};
 
 const runJudge0 = async (code, language, stdin) => {
   if (JUDGE0_KEYS.length === 0) throw new Error("JUDGE0_NO_KEYS");

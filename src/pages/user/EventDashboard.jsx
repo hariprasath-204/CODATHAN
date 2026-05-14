@@ -18,17 +18,14 @@ export default function EventDashboard() {
   
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [language, setLanguage] = useState('c++');
+  const [enabledLanguages, setEnabledLanguages] = useState({ 'c++': true });
 
   // Default starter code templates
   const STARTER_CODE = {
-    'c++': `#include <iostream>
-using namespace std;
-
-int main() {
-    // Write your solution here
-    
-    return 0;
-}`
+    'c': `#include <stdio.h>\n\nint main() {\n    // Write your solution here\n    \n    return 0;\n}`,
+    'c++': `#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your solution here\n    \n    return 0;\n}`,
+    'java': `import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Write your solution here\n        \n    }\n}`,
+    'python': `def main():\n    # Write your solution here\n    pass\n\nif __name__ == "__main__":\n    main()`
   };
 
   const [code, setCode] = useState(STARTER_CODE['c++']);
@@ -129,6 +126,13 @@ int main() {
       }
     });
 
+    // Listen to enabled languages
+    const unsubLangs = onSnapshot(doc(db, 'event_settings', 'languages'), (snap) => {
+      if (snap.exists()) {
+        setEnabledLanguages(snap.data());
+      }
+    });
+
     setTimeout(() => setShowWelcome(false), 3000);
 
     return () => {
@@ -136,6 +140,7 @@ int main() {
       unsubRounds();
       unsubCode();
       unsubReset();
+      unsubLangs();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleCheatDetection);
     };
@@ -471,7 +476,10 @@ int main() {
             }} 
             style={{ padding: '0.5rem', background: 'var(--bg-secondary)', marginLeft: '1rem' }}
           >
-            <option value="c++">C++</option>
+            {enabledLanguages['c'] && <option value="c">C</option>}
+            {enabledLanguages['cpp'] || enabledLanguages['c++'] ? <option value="c++">C++</option> : null}
+            {enabledLanguages['java'] && <option value="java">Java</option>}
+            {enabledLanguages['python'] && <option value="python">Python</option>}
           </select>
 
           {timeLeftStr && (
@@ -538,7 +546,7 @@ int main() {
             <Editor
               height="100%"
               theme="vs-dark"
-              language="cpp"
+              language={language === 'c++' || language === 'c' ? 'cpp' : language}
               value={code}
               onChange={handleCodeChange}
               options={{ minimap: { enabled: false }, fontSize: 16 }}
