@@ -58,8 +58,8 @@ export default function Results() {
     doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 37);
 
     // ─── Winner badges ────────────────────────────────────────────────────────
-    const medals = ['🥇 1ST PLACE', '🥈 2ND PLACE', '🥉 3RD PLACE'];
-    const medalColors = [[200, 150, 0], [160, 160, 160], [160, 82, 45]];
+    const medals      = ['#1 - GOLD', '#2 - SILVER', '#3 - BRONZE'];
+    const medalColors = [[180, 130, 0], [120, 120, 120], [140, 80, 40]];
 
     winners.forEach((w, i) => {
       const x = 14 + i * 62;
