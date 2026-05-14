@@ -28,16 +28,7 @@ int main() {
     // Write your solution here
     
     return 0;
-}`,
-    'java': `import java.util.Scanner;
-
-public class Main {
-    public static void main(String[] args) {
-        Scanner sc = new Scanner(System.in);
-        // Write your solution here
-        
-    }
-}`,
+}`
   };
 
   const [code, setCode] = useState(STARTER_CODE['c++']);
@@ -471,9 +462,16 @@ public class Main {
           
           <h3 style={{ margin: 0 }}>{selectedQuestion?.title}</h3>
 
-          <select value={language} onChange={(e) => setLanguage(e.target.value)} style={{ padding: '0.5rem', background: 'var(--bg-secondary)', marginLeft: '1rem' }}>
+          <select 
+            value={language} 
+            onChange={(e) => {
+              const newLang = e.target.value;
+              setLanguage(newLang);
+              setCode(STARTER_CODE[newLang] || '');
+            }} 
+            style={{ padding: '0.5rem', background: 'var(--bg-secondary)', marginLeft: '1rem' }}
+          >
             <option value="c++">C++</option>
-            <option value="java">Java</option>
           </select>
 
           {timeLeftStr && (
@@ -540,7 +538,7 @@ public class Main {
             <Editor
               height="100%"
               theme="vs-dark"
-              language={language === 'c++' ? 'cpp' : 'java'}
+              language="cpp"
               value={code}
               onChange={handleCodeChange}
               options={{ minimap: { enabled: false }, fontSize: 16 }}

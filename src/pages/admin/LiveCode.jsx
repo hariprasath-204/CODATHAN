@@ -162,7 +162,7 @@ export default function LiveCode() {
                   <Editor
                     height="calc(100% - 24px)"
                     theme="vs-dark"
-                    language={selectedCode.language === 'c++' ? 'cpp' : 'java'}
+                    language="cpp"
                     value={selectedCode.code || ''}
                     options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
                   />
