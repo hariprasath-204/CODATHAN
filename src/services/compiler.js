@@ -208,14 +208,16 @@ export const executeCode = async (code, language, stdin = "") => {
 
   const selfHostedPistonUrl = import.meta.env.VITE_PISTON_SELF_URL || "";
 
-  // Build provider chain — self-hosted Piston goes first if configured
+  // ⚡ KEY INSIGHT: Wandbox goes FIRST because each student has their OWN IP
+  // → each student gets their own independent rate limit from Wandbox
+  // → 200 students = 200 separate Wandbox quotas = effectively unlimited!
   const providers = [
+    { name: "Wandbox",          fn: () => runWandbox(code, language, stdin) },
     ...(selfHostedPistonUrl
       ? [{ name: "Piston (Self-Hosted)", fn: () => runPiston(code, language, stdin, selfHostedPistonUrl) }]
       : []
     ),
     { name: "Piston (Public)",  fn: () => runPiston(code, language, stdin)  },
-    { name: "Wandbox",          fn: () => runWandbox(code, language, stdin) },
     { name: "Judge0",           fn: () => runJudge0(code, language, stdin)  },
   ];
 
