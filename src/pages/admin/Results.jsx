@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { db } from '../../firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { FileDown, AlertTriangle } from 'lucide-react';
 
@@ -88,7 +88,7 @@ export default function Results() {
       user.flags || 0,
     ]);
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: 68,
       head: [['#', 'Lot No', 'Name', 'Points', 'Solved', 'Submissions', 'Flags']],
       body: tableData,
