@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Trophy, Clock, FileText, Users, Activity, FileDown, Code2 } from 'lucide-react';
+import { Trophy, Clock, FileText, Users, Activity, FileDown, Code2, AlertOctagon, X } from 'lucide-react';
 
 export default function AdminLayout() {
   const navigate = useNavigate();
@@ -17,23 +17,40 @@ export default function AdminLayout() {
 
   const [latestLogs, setLatestLogs] = useState([]);
   const [showTicker, setShowTicker] = useState(false);
-  const [tickerKey, setTickerKey] = useState(0);  // force re-mount on new log
+  const [tickerKey, setTickerKey] = useState(0);
   const prevLogCount = React.useRef(0);
+
+  // ── Compiler Emergency Alert ──────────────────────────────────────────────
+  const [compilerAlerts, setCompilerAlerts]   = useState([]);
+  const [showCompilerAlert, setShowCompilerAlert] = useState(false);
+  const prevAlertCount = React.useRef(0);
 
   React.useEffect(() => {
     import('../../firebase').then(({ db }) => {
       import('firebase/firestore').then(({ collection, query, onSnapshot, orderBy, limit }) => {
+        // Breaking news ticker
         const qLogs = query(collection(db, 'logs'), orderBy('timestamp', 'desc'), limit(5));
         onSnapshot(qLogs, (snapshot) => {
           const docs = snapshot.docs;
           const newCount = snapshot.size;
           if (newCount > prevLogCount.current) {
-            // New log arrived — re-mount ticker animation
             setShowTicker(true);
             setTickerKey(k => k + 1);
           }
           prevLogCount.current = newCount;
           setLatestLogs(docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+
+        // Compiler emergency alerts
+        const qAlerts = query(collection(db, 'compiler_alerts'), orderBy('timestamp', 'desc'), limit(10));
+        onSnapshot(qAlerts, (snapshot) => {
+          const alerts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          const newCount = snapshot.size;
+          if (newCount > prevAlertCount.current) {
+            setShowCompilerAlert(true); // new alert arrived
+          }
+          prevAlertCount.current = newCount;
+          setCompilerAlerts(alerts);
         });
       });
     });
@@ -62,7 +79,39 @@ export default function AdminLayout() {
 
       {/* Main Content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Breaking News Ticker */}
+        {/* 🚨 Compiler Emergency Alert — flashes when all API providers fail */}
+        {showCompilerAlert && compilerAlerts.length > 0 && (
+          <div style={{
+            background: '#ff0000',
+            color: '#fff',
+            padding: '1rem 1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            animation: 'emergency-flash 0.8s infinite alternate',
+            zIndex: 200,
+            position: 'relative',
+          }}>
+            <AlertOctagon size={24} style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <strong style={{ fontSize: '1rem' }}>🚨 EMERGENCY: COMPILER DOWN!</strong>
+              <div style={{ fontSize: '0.85rem', marginTop: '0.2rem', opacity: 0.9 }}>
+                Last reported by Lot <strong>{compilerAlerts[0]?.lotNo}</strong> at{' '}
+                {compilerAlerts[0]?.timestamp?.toDate().toLocaleTimeString()} —
+                All {compilerAlerts.length} report(s) in queue.
+                Students cannot compile code!
+              </div>
+            </div>
+            <button
+              onClick={() => setShowCompilerAlert(false)}
+              style={{ background: 'rgba(0,0,0,0.3)', border: 'none', color: '#fff', padding: '0.4rem 0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+            >
+              <X size={16} /> Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Breaking News Ticker */}}
         {showTicker && latestLogs.length > 0 && (
           <div style={{ background: 'var(--accent-danger)', color: 'white', padding: '0.5rem', display: 'flex', alignItems: 'center', fontWeight: 'bold' }}>
             <span style={{ background: 'black', padding: '0.2rem 0.5rem', borderRadius: '4px', marginRight: '1rem', whiteSpace: 'nowrap' }}>
@@ -85,8 +134,12 @@ export default function AdminLayout() {
         )}
         <style>{`
           @keyframes scroll-left {
-            0% { transform: translateX(100%); }
+            0%   { transform: translateX(100%); }
             100% { transform: translateX(-100%); }
+          }
+          @keyframes emergency-flash {
+            0%   { background: #ff0000; }
+            100% { background: #cc0000; }
           }
         `}</style>
         

@@ -1,19 +1,21 @@
 // ════════════════════════════════════════════════════════════════════════════
 //  CODATHAN — Resilient Multi-Provider Code Execution Engine
-//  Designed for 200+ concurrent users
+//  Designed for 500+ concurrent users
 //
 //  Provider chain (auto-fallback):
-//  1. Piston (self-hosted on Railway — unlimited, fastest)
-//  2. Piston (public emkc.org — free, reliable)
-//  3. Wandbox (with key rotation)
+//  1. Wandbox (per-IP limits = each user independent quota)
+//  2. Piston self-hosted (if VITE_PISTON_SELF_URL configured)
+//  3. Piston public (emkc.org — free, reliable)
 //  4. Judge0 RapidAPI (key pool fallback)
 //
 //  Features:
-//  ✅ Global concurrency limiter (max 5 parallel API calls)
-//  ✅ Per-user request queuing (no burst flooding)
-//  ✅ Exponential backoff on retries
-//  ✅ Automatic provider fallback
+//  ✅ Global concurrency limiter (max 10 parallel API calls)
+//  ✅ 30s response cache (identical code = instant result)
+//  ✅ Exponential backoff retries
+//  ✅ Emergency admin alert via Firestore when all providers fail
 // ════════════════════════════════════════════════════════════════════════════
+import { db } from '../firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
 // ─── Global concurrency limiter ──────────────────────────────────────────────
 const MAX_CONCURRENT = 10; // Increased for 500+ users
@@ -274,8 +276,17 @@ export const executeCode = async (code, language, stdin = "") => {
       }
     }
 
+    // 🚨 All providers failed — alert admin via Firestore in real-time
+    const lotNo = localStorage.getItem('codathan_user') || 'unknown';
+    addDoc(collection(db, 'compiler_alerts'), {
+      lotNo,
+      language,
+      timestamp: new Date(),
+      message: 'All compilation providers failed. Students cannot submit code.',
+    }).catch(() => {}); // fire and forget, don't block
+
     return {
-      output:  "⚠️ All compilation providers are currently unavailable.\nPlease wait a few seconds and try again.",
+      output:  '⚠️ Compilation service is temporarily down.\nAdmin has been alerted automatically. Please wait a moment.',
       success: false,
     };
   } finally {
