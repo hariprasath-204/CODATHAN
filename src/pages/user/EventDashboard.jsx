@@ -108,15 +108,6 @@ export default function EventDashboard() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleCheatDetection);
 
-    // Keep-alive ping for self-hosted Piston on Render (prevents sleep)
-    const pistonUrl = import.meta.env.VITE_PISTON_SELF_URL;
-    let keepAliveInterval = null;
-    if (pistonUrl) {
-      const ping = () => fetch(`${pistonUrl}/api/v2/runtimes`).catch(() => {});
-      ping();
-      keepAliveInterval = setInterval(ping, 8 * 60 * 1000);
-    }
-
     // Listen for admin compiler reset signal
     const unsubReset = onSnapshot(doc(db, 'system_commands', 'compiler_reset'), (snap) => {
       if (snap.exists()) {
@@ -134,7 +125,6 @@ export default function EventDashboard() {
       unsubReset();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleCheatDetection);
-      if (keepAliveInterval) clearInterval(keepAliveInterval);
     };
   }, [navigate]);
 
