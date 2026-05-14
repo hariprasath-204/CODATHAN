@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Trophy, Clock, FileText, Users, Activity, FileDown, Code2, AlertOctagon, X } from 'lucide-react';
+import { Trophy, Clock, FileText, Users, Activity, FileDown, Code2, AlertOctagon, X, RefreshCw } from 'lucide-react';
 
 export default function AdminLayout() {
   const navigate = useNavigate();
@@ -24,6 +24,23 @@ export default function AdminLayout() {
   const [compilerAlerts, setCompilerAlerts]   = useState([]);
   const [showCompilerAlert, setShowCompilerAlert] = useState(false);
   const prevAlertCount = React.useRef(0);
+  const [resetting, setResetting] = React.useState(false);
+
+  const handleCompilerReset = async () => {
+    setResetting(true);
+    try {
+      const { db } = await import('../../firebase');
+      const { doc, setDoc } = await import('firebase/firestore');
+      await setDoc(doc(db, 'system_commands', 'compiler_reset'), {
+        resetAt: new Date(),
+        triggeredBy: 'admin',
+      });
+    } catch (e) {
+      console.error('Reset failed', e);
+    }
+    setResetting(false);
+    setShowCompilerAlert(false);
+  };
 
   React.useEffect(() => {
     import('../../firebase').then(({ db }) => {
@@ -102,16 +119,26 @@ export default function AdminLayout() {
                 Students cannot compile code!
               </div>
             </div>
-            <button
-              onClick={() => setShowCompilerAlert(false)}
-              style={{ background: 'rgba(0,0,0,0.3)', border: 'none', color: '#fff', padding: '0.4rem 0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
-            >
-              <X size={16} /> Dismiss
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={handleCompilerReset}
+                disabled={resetting}
+                style={{ background: '#000', border: '2px solid #fff', color: '#fff', padding: '0.4rem 1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 'bold' }}
+              >
+                <RefreshCw size={16} style={{ animation: resetting ? 'spin 1s linear infinite' : 'none' }} />
+                {resetting ? 'Resetting...' : 'Reset Compiler'}
+              </button>
+              <button
+                onClick={() => setShowCompilerAlert(false)}
+                style={{ background: 'rgba(0,0,0,0.3)', border: 'none', color: '#fff', padding: '0.4rem 0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+              >
+                <X size={16} /> Dismiss
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Breaking News Ticker */}}
+        {/* Breaking News Ticker */}
         {showTicker && latestLogs.length > 0 && (
           <div style={{ background: 'var(--accent-danger)', color: 'white', padding: '0.5rem', display: 'flex', alignItems: 'center', fontWeight: 'bold' }}>
             <span style={{ background: 'black', padding: '0.2rem 0.5rem', borderRadius: '4px', marginRight: '1rem', whiteSpace: 'nowrap' }}>
@@ -140,6 +167,10 @@ export default function AdminLayout() {
           @keyframes emergency-flash {
             0%   { background: #ff0000; }
             100% { background: #cc0000; }
+          }
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
           }
         `}</style>
         

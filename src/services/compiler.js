@@ -94,6 +94,17 @@ const JUDGE0_KEYS = [
 let wandboxKeyIdx = 0;
 let judge0KeyIdx  = 0;
 
+// ─── Admin Reset ─────────────────────────────────────────────────────────────
+// Called when admin clicks "Reset Compiler" — resets all key indices and
+// clears the response cache so every user starts fresh from key #1
+export const resetCompiler = () => {
+  wandboxKeyIdx = 0;
+  judge0KeyIdx  = 0;
+  responseCache.clear();
+  console.log('[Compiler] ✅ Reset by admin — all key indices and cache cleared');
+};
+
+
 // ════════════════════════════════════════════════════════════════════════════
 //  PROVIDER 1 — Piston Self-Hosted (Railway)
 //  Set VITE_PISTON_SELF_URL in .env to your Railway deployment URL.

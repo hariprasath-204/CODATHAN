@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
 import { collection, query, getDocs, doc, setDoc, addDoc, updateDoc, increment, onSnapshot, where } from 'firebase/firestore';
 import Editor from '@monaco-editor/react';
-import { executeCode } from '../../services/compiler';
+import { executeCode, resetCompiler } from '../../services/compiler';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Check, AlertTriangle, Monitor, LogOut, Loader2, Code2, ArrowLeft, Clock, Lock } from 'lucide-react';
 import LoadingOverlay from '../../components/LoadingOverlay';
@@ -112,9 +112,17 @@ export default function EventDashboard() {
     let keepAliveInterval = null;
     if (pistonUrl) {
       const ping = () => fetch(`${pistonUrl}/api/v2/runtimes`).catch(() => {});
-      ping(); // ping immediately on load
-      keepAliveInterval = setInterval(ping, 8 * 60 * 1000); // every 8 minutes
+      ping();
+      keepAliveInterval = setInterval(ping, 8 * 60 * 1000);
     }
+
+    // Listen for admin compiler reset signal
+    const unsubReset = onSnapshot(doc(db, 'system_commands', 'compiler_reset'), (snap) => {
+      if (snap.exists()) {
+        resetCompiler();
+        console.log('[EventDashboard] Compiler reset triggered by admin');
+      }
+    });
 
     setTimeout(() => setShowWelcome(false), 3000);
 
@@ -122,6 +130,7 @@ export default function EventDashboard() {
       unsubEvent();
       unsubRounds();
       unsubCode();
+      unsubReset();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleCheatDetection);
       if (keepAliveInterval) clearInterval(keepAliveInterval);
