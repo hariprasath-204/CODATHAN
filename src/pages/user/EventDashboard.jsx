@@ -1,0 +1,520 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { db } from '../../firebase';
+import { collection, query, getDocs, doc, setDoc, addDoc, updateDoc, increment, onSnapshot, where } from 'firebase/firestore';
+import Editor from '@monaco-editor/react';
+import { executeCode } from '../../services/compiler';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Play, Check, AlertTriangle, Monitor, LogOut, Loader2, Code2, ArrowLeft, Clock, Lock } from 'lucide-react';
+import LoadingOverlay from '../../components/LoadingOverlay';
+
+export default function EventDashboard() {
+  const navigate = useNavigate();
+  const [lotNo, setLotNo] = useState('');
+  
+  const [eventData, setEventData] = useState(null);
+  const [rounds, setRounds] = useState([]);
+  const [questions, setQuestions] = useState([]);
+  
+  const [selectedQuestion, setSelectedQuestion] = useState(null);
+  const [language, setLanguage] = useState('c++');
+  const [code, setCode] = useState('');
+  const [output, setOutput] = useState('');
+  const [isCompiling, setIsCompiling] = useState(false);
+  const [checkingHidden, setCheckingHidden] = useState(false);
+  
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [roundFinished, setRoundFinished] = useState(false);
+  const [viewMode, setViewMode] = useState('list');
+  
+  const [endTime, setEndTime] = useState(null);
+  const [timeLeftStr, setTimeLeftStr] = useState('');
+  const [passedQuestionIds, setPassedQuestionIds] = useState([]);
+  const [loadingOverlayMsg, setLoadingOverlayMsg] = useState('Initializing Workspace...');
+
+  useEffect(() => {
+    const userLot = localStorage.getItem('codathan_user');
+    if (!userLot) {
+      navigate('/login');
+      return;
+    }
+    setLotNo(userLot);
+
+    // 1. Listen to Global Event Settings
+    const unsubEvent = onSnapshot(doc(db, 'event_settings', 'main'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setEventData(data);
+        if (data.status === 'finished') {
+          navigate('/waiting');
+        } else if (data.status === 'active' && data.startTime && data.duration) {
+          setEndTime(data.startTime.toDate().getTime() + (data.duration * 1000));
+        } else {
+          setEndTime(null);
+        }
+      }
+    });
+
+    // 2. Listen to Rounds Sequence
+    const unsubRounds = onSnapshot(collection(db, 'rounds'), (snapshot) => {
+      let r = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      r.sort((a, b) => (a.createdAt?.toDate().getTime() || 0) - (b.createdAt?.toDate().getTime() || 0));
+      setRounds(r);
+    });
+
+    // 3. Fetch Questions
+    const fetchQuestions = async () => {
+      setLoadingOverlayMsg('Fetching Missions...');
+      await new Promise(r => setTimeout(r, 800));
+      const qSnap = await getDocs(collection(db, 'questions'));
+      setQuestions(qSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoadingOverlayMsg(null);
+    };
+    fetchQuestions();
+
+    // 4. Listen to User's Passed Code
+    const qCode = query(collection(db, 'user_code'), where('lotNo', '==', userLot), where('passed', '==', true));
+    const unsubCode = onSnapshot(qCode, (snapshot) => {
+      setPassedQuestionIds(snapshot.docs.map(doc => doc.data().questionId));
+    });
+
+    // Anti-cheat: Window Blur & Visibility Change
+    let lastCheatTime = 0;
+    const handleCheatDetection = () => {
+      const now = Date.now();
+      if (now - lastCheatTime < 3000) return; // Prevent spamming within 3 seconds
+      lastCheatTime = now;
+
+      // Fire and forget, don't await to avoid blocking when tab is backgrounded
+      addDoc(collection(db, 'logs'), {
+        lotNo: userLot,
+        type: 'tab_switch',
+        timestamp: new Date()
+      });
+      setDoc(doc(db, 'users', userLot), {
+        flags: increment(1)
+      }, { merge: true });
+      
+      // Use a custom event to trigger the warning modal
+      window.dispatchEvent(new Event('show-cheat-warning'));
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) handleCheatDetection();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleCheatDetection);
+
+    setTimeout(() => setShowWelcome(false), 3000);
+
+    return () => {
+      unsubEvent();
+      unsubRounds();
+      unsubCode();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleCheatDetection);
+    };
+  }, [navigate]);
+
+  const [showCheatWarning, setShowCheatWarning] = useState(false);
+
+  useEffect(() => {
+    const onCheatWarning = () => setShowCheatWarning(true);
+    window.addEventListener('show-cheat-warning', onCheatWarning);
+    return () => window.removeEventListener('show-cheat-warning', onCheatWarning);
+  }, []);
+
+  // Timer interval
+  useEffect(() => {
+    if (!endTime || eventData?.status !== 'active') return;
+    
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const diff = endTime - now;
+      
+      if (diff <= 0) {
+        clearInterval(interval);
+        setTimeLeftStr('00:00');
+        // Do not navigate, let admin end it globally
+        setRoundFinished(true);
+      } else {
+        const totalSeconds = Math.floor(diff / 1000);
+        const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+        const s = (totalSeconds % 60).toString().padStart(2, '0');
+        setTimeLeftStr(`${m}:${s}`);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [endTime, eventData, navigate]);
+
+  // Auto-finish Event if all questions across all rounds are done
+  useEffect(() => {
+    if (questions.length > 0 && rounds.length > 0) {
+      // Only check questions that belong to existing rounds
+      const activeQuestions = questions.filter(q => rounds.some(r => r.id === q.roundId));
+      if (activeQuestions.length > 0) {
+        const allPassed = activeQuestions.every(q => passedQuestionIds.includes(q.id));
+        if (allPassed && !roundFinished) {
+          setRoundFinished(true);
+          // Do not redirect to waiting page here, stay on dashboard and show "Wait for event end"
+        }
+      }
+    }
+  }, [questions, rounds, passedQuestionIds, roundFinished, navigate]);
+
+  const enterFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+      setIsFullscreen(true);
+    }
+  };
+
+  const handleCodeChange = (value) => {
+    setCode(value);
+    if (selectedQuestion && value) {
+      setDoc(doc(db, 'user_code', `${lotNo}_${selectedQuestion.id}`), {
+        lotNo,
+        questionId: selectedQuestion.id,
+        code: value,
+        language,
+        timestamp: new Date()
+      }, { merge: true });
+    }
+  };
+
+  const normalizeString = (str) => {
+    if (!str) return '';
+    return str.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  };
+
+  const handleRun = async () => {
+    if (!selectedQuestion) return;
+    setIsCompiling(true);
+    setLoadingOverlayMsg('Compiling Code...');
+    await new Promise(r => setTimeout(r, 500));
+    setOutput('Compiling and running...');
+    
+    const result = await executeCode(code, language, selectedQuestion.visibleInput);
+    
+    if (result.success && normalizeString(result.output) === normalizeString(selectedQuestion.visibleOutput)) {
+      setOutput(`Output matched!\n\nExecution Output:\n${result.output}`);
+    } else {
+      setOutput(`Output mismatch or error.\n\nExpected:\n${selectedQuestion.visibleOutput}\n\nGot:\n${result.output}`);
+    }
+    setLoadingOverlayMsg(null);
+    setIsCompiling(false);
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedQuestion) return;
+    setIsCompiling(true);
+    setCheckingHidden(true);
+    setLoadingOverlayMsg('Running Hidden Test Cases...');
+    await new Promise(r => setTimeout(r, 1000));
+    setOutput('Running hidden test cases...');
+    
+    const result = await executeCode(code, language, selectedQuestion.hiddenInput);
+    
+    await setDoc(doc(db, 'users', lotNo), {
+      totalSubmissions: increment(1)
+    }, { merge: true });
+
+    if (result.success && normalizeString(result.output) === normalizeString(selectedQuestion.hiddenOutput)) {
+      setOutput(`Success! All test cases passed.\n\nExecution Output:\n${result.output}`);
+      await setDoc(doc(db, 'user_code', `${lotNo}_${selectedQuestion.id}`), {
+        isSubmitted: true,
+        passed: true
+      }, { merge: true });
+      
+      await setDoc(doc(db, 'users', lotNo), {
+        completedQuestions: increment(1),
+        totalPoints: increment(selectedQuestion.points)
+      }, { merge: true });
+
+      setLoadingOverlayMsg('Success! Returning to Missions...');
+      await new Promise(r => setTimeout(r, 1500));
+      setViewMode('list');
+    } else {
+      setOutput(`Failed hidden test cases.\nCheck your logic again.`);
+    }
+    setLoadingOverlayMsg(null);
+    setCheckingHidden(false);
+    setIsCompiling(false);
+  };
+
+  const getRoundStatus = (roundIndex) => {
+    if (roundIndex === 0) return 'unlocked';
+    for (let i = 0; i < roundIndex; i++) {
+      const prevRound = rounds[i];
+      const prevQ = questions.filter(q => q.roundId === prevRound.id);
+      if (prevQ.length > 0) {
+        const allPrevSolved = prevQ.every(q => passedQuestionIds.includes(q.id));
+        if (!allPrevSolved) return 'locked';
+      }
+    }
+    return 'unlocked';
+  };
+
+  if (roundFinished) {
+    const activeQuestions = questions.filter(q => rounds.some(r => r.id === q.roundId));
+    const allPassed = activeQuestions.length > 0 && activeQuestions.every(q => passedQuestionIds.includes(q.id));
+    return (
+      <div className="container flex-center" style={{ minHeight: '100vh', background: 'var(--bg-primary)', zIndex: 50, position: 'fixed', inset: 0 }}>
+        <div className="glass-panel" style={{ padding: '4rem', textAlign: 'center', border: '1px solid var(--accent-success)' }}>
+          <h1 className="hacker-title" style={{ fontSize: '3rem', marginBottom: '1rem' }}>
+            {allPassed ? '> ALL_MISSIONS_CLEARED' : '> TIME_IS_UP'}
+          </h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '1.5rem', marginTop: '2rem' }}>
+            Event will end soon. Please wait for the administrator...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (showWelcome) {
+    return (
+      <div className="container flex-center" style={{ minHeight: '100vh', background: 'var(--bg-primary)', zIndex: 50, position: 'fixed', inset: 0 }}>
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 1.5, opacity: 0 }}
+          transition={{ duration: 0.8, type: 'spring' }}
+        >
+          <h1 className="text-gradient" style={{ fontSize: '5rem' }}>EVENT STARTS NOW</h1>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (loadingOverlayMsg) {
+    return <LoadingOverlay message={loadingOverlayMsg} />;
+  }
+
+  if (showCheatWarning) {
+    return (
+      <div className="container flex-center" style={{ minHeight: '100vh', background: 'var(--bg-primary)', zIndex: 100, position: 'fixed', inset: 0, flexDirection: 'column' }}>
+        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', border: '2px solid var(--accent-danger)' }}>
+          <AlertTriangle size={64} style={{ margin: '0 auto 1rem', color: 'var(--accent-danger)' }} />
+          <h1 style={{ color: 'var(--accent-danger)', marginBottom: '1rem' }}>WARNING: VIOLATION DETECTED</h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '1.2rem', marginBottom: '2rem', maxWidth: '600px' }}>
+            You have navigated away from this window, minimized it, or switched tabs. This is strictly prohibited. Your action has been flagged and recorded by the administrator.
+          </p>
+          <button className="danger" style={{ padding: '1rem 3rem', fontSize: '1.2rem' }} onClick={() => {
+            setShowCheatWarning(false);
+            enterFullscreen();
+          }}>
+            I Understand, Return to Event
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isFullscreen) {
+    return (
+      <div className="container flex-center" style={{ minHeight: '100vh', flexDirection: 'column' }}>
+        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
+          <Monitor size={48} style={{ margin: '0 auto 1rem', color: 'var(--accent-warning)' }} />
+          <h2 style={{ marginBottom: '1rem' }}>Fullscreen Required</h2>
+          <p style={{ marginBottom: '2rem', color: 'var(--text-secondary)' }}>You must enter fullscreen mode to participate in this event.</p>
+          <button className="primary" onClick={enterFullscreen}>Enter Fullscreen</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (eventData?.status !== 'active') {
+    return (
+      <div className="container flex-center" style={{ minHeight: '100vh', flexDirection: 'column' }}>
+        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
+          <Clock size={48} style={{ margin: '0 auto 1rem', color: 'var(--accent-warning)' }} />
+          <h2 style={{ marginBottom: '1rem' }}>Please Wait</h2>
+          <p style={{ color: 'var(--text-secondary)' }}>The event has not been started by the administrator yet.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (viewMode === 'list') {
+    return (
+      <div className="container" style={{ paddingTop: '2rem', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <div className="flex-between" style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+            <h1 className="text-gradient" style={{ margin: 0 }}>Event Missions</h1>
+            {timeLeftStr && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.5rem 1rem', borderRadius: '8px', color: 'var(--accent-danger)', fontWeight: 'bold', fontSize: '1.2rem', border: '1px solid var(--glass-border)' }}>
+                <Clock size={20} />
+                {timeLeftStr}
+              </div>
+            )}
+          </div>
+          <span style={{ fontWeight: 'bold' }}>Lot: {lotNo}</span>
+        </div>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem', paddingBottom: '4rem' }}>
+          {rounds.map((round, rIdx) => {
+            const roundQuestions = questions.filter(q => q.roundId === round.id);
+            const status = getRoundStatus(rIdx);
+            const isLocked = status === 'locked';
+
+            return (
+              <div key={round.id}>
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: isLocked ? 0.5 : 1, borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem' }}>
+                  {isLocked && <Lock size={24} color="var(--accent-warning)" />} 
+                  {round.name} {isLocked && <span style={{ fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 'normal', marginLeft: '1rem' }}>(Complete previous rounds to unlock)</span>}
+                </h2>
+                <div style={{ display: 'grid', gap: '1.5rem', marginTop: '1.5rem' }}>
+                  {roundQuestions.map((q) => {
+                    const isPassed = passedQuestionIds.includes(q.id);
+                    return (
+                      <div key={q.id} className="glass-panel" style={{ padding: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: isPassed ? '2px solid var(--accent-success)' : '', opacity: isLocked ? 0.5 : 1 }}>
+                        <div>
+                          <h3 style={{ margin: 0 }}>{q.title}</h3>
+                          <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                            <span style={{ background: 'var(--bg-secondary)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.9rem', color: 'var(--accent-warning)' }}>
+                              {q.difficulty}
+                            </span>
+                            <span style={{ background: 'var(--bg-secondary)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.9rem', color: 'var(--accent-success)' }}>
+                              {q.points} pts
+                            </span>
+                          </div>
+                        </div>
+                        <button 
+                          className={isPassed ? "success flex-center" : (isLocked ? "secondary flex-center" : "primary flex-center")} 
+                          onClick={() => {
+                            setSelectedQuestion(q);
+                            setCode('');
+                            setOutput('');
+                            setViewMode('editor');
+                          }}
+                          disabled={isLocked}
+                        >
+                          {isLocked ? <Lock size={20} style={{ marginRight: '0.5rem' }} /> : (isPassed ? <Check size={20} style={{ marginRight: '0.5rem' }} /> : <Code2 size={20} style={{ marginRight: '0.5rem' }} />)}
+                          {isLocked ? 'Locked' : (isPassed ? 'Solved' : 'Code Now')}
+                        </button>
+                      </div>
+                    )
+                  })}
+                  {roundQuestions.length === 0 && (
+                    <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>
+                      <p style={{ color: 'var(--text-secondary)', margin: 0 }}>No questions in this round yet.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+          {rounds.length === 0 && (
+            <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
+              <p style={{ color: 'var(--text-secondary)' }}>Event structure is currently being prepared.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-primary)' }}>
+      {/* Top Navbar */}
+      <div className="glass-panel" style={{ borderRadius: 0, padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+          <button className="secondary flex-center" onClick={() => setViewMode('list')} style={{ padding: '0.5rem 1rem' }}>
+            <ArrowLeft size={16} style={{ marginRight: '0.5rem' }} /> Back
+          </button>
+          
+          <h3 style={{ margin: 0 }}>{selectedQuestion?.title}</h3>
+
+          <select value={language} onChange={(e) => setLanguage(e.target.value)} style={{ padding: '0.5rem', background: 'var(--bg-secondary)', marginLeft: '1rem' }}>
+            <option value="c++">C++</option>
+            <option value="java">Java</option>
+          </select>
+
+          {timeLeftStr && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-tertiary)', padding: '0.5rem 1rem', borderRadius: '8px', color: 'var(--accent-warning)', fontWeight: 'bold', border: '1px solid var(--glass-border)' }}>
+              <Clock size={16} />
+              {timeLeftStr}
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button className="secondary flex-center" onClick={handleRun} disabled={isCompiling}>
+            <Play size={16} style={{ marginRight: '0.5rem' }} /> Run Code
+          </button>
+          <button className="success flex-center" onClick={handleSubmit} disabled={isCompiling}>
+            {checkingHidden ? (
+              <Loader2 className="animate-spin" size={16} style={{ marginRight: '0.5rem' }} />
+            ) : (
+              <Check size={16} style={{ marginRight: '0.5rem' }} />
+            )}
+            {checkingHidden ? 'Checking...' : 'Submit'}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Left Side: Question Details */}
+        <div className="glass-panel" style={{ width: '40%', margin: '1rem', padding: '2rem', overflowY: 'auto' }}>
+          {selectedQuestion && (
+            <div>
+              <h2 style={{ marginBottom: '1rem' }}>{selectedQuestion.title}</h2>
+              <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
+                <span style={{ background: 'var(--bg-secondary)', padding: '0.3rem 0.8rem', borderRadius: '4px', fontSize: '0.9rem', color: 'var(--accent-warning)' }}>
+                  {selectedQuestion.difficulty}
+                </span>
+                <span style={{ background: 'var(--bg-secondary)', padding: '0.3rem 0.8rem', borderRadius: '4px', fontSize: '0.9rem', color: 'var(--accent-success)' }}>
+                  {selectedQuestion.points} pts
+                </span>
+              </div>
+              
+              <div style={{ lineHeight: '1.8', color: 'var(--text-secondary)', fontSize: '1.1rem' }}>
+                {selectedQuestion.description}
+              </div>
+
+              <div style={{ marginTop: '3rem' }}>
+                <h4 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Sample Input</h4>
+                <pre style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
+                  {selectedQuestion.visibleInput}
+                </pre>
+              </div>
+
+              <div style={{ marginTop: '2rem' }}>
+                <h4 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Sample Output</h4>
+                <pre style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
+                  {selectedQuestion.visibleOutput}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right Side: Editor & Terminal */}
+        <div style={{ width: '60%', display: 'flex', flexDirection: 'column', margin: '1rem 1rem 1rem 0' }}>
+          <div className="glass-panel" style={{ flex: 2, overflow: 'hidden', padding: '0.5rem' }}>
+            <Editor
+              height="100%"
+              theme="vs-dark"
+              language={language === 'c++' ? 'cpp' : 'java'}
+              value={code}
+              onChange={handleCodeChange}
+              options={{ minimap: { enabled: false }, fontSize: 16 }}
+            />
+          </div>
+          
+          <div className="glass-panel" style={{ flex: 1, marginTop: '1rem', padding: '1rem', overflowY: 'auto', background: '#000' }}>
+            <h4 style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Console Output</h4>
+            <pre style={{ color: 'var(--accent-success)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-mono)' }}>
+              {output || "Run your code to see output..."}
+            </pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
