@@ -32,6 +32,7 @@ export default function EventDashboard() {
   const [timeLeftStr, setTimeLeftStr] = useState('');
   const [passedQuestionIds, setPassedQuestionIds] = useState([]);
   const [loadingOverlayMsg, setLoadingOverlayMsg] = useState('Initializing Workspace...');
+  const lastRunRef = useRef(0); // debounce: prevent rapid Wandbox calls
 
   useEffect(() => {
     const userLot = localStorage.getItem('codathan_user');
@@ -213,6 +214,13 @@ export default function EventDashboard() {
 
   const handleRun = async () => {
     if (!selectedQuestion) return;
+    // Debounce: enforce 2s gap between API calls (Wandbox safe usage)
+    const now = Date.now();
+    if (now - lastRunRef.current < 2000) {
+      setOutput('Please wait 2 seconds before running again...');
+      return;
+    }
+    lastRunRef.current = now;
     setIsCompiling(true);
     setLoadingOverlayMsg('Compiling Code...');
     await new Promise(r => setTimeout(r, 500));
