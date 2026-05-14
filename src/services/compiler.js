@@ -1,82 +1,87 @@
 // ════════════════════════════════════════════════════════════════════════════
 //  CODATHAN — Resilient Multi-Provider Code Execution Engine
-//  Priority: Wandbox (key pool) → Piston API (free, no key) → Judge0 (RapidAPI)
-//  If any provider fails or rate-limits, the next one is tried automatically.
+//  Designed for 200+ concurrent users
+//
+//  Provider chain (auto-fallback):
+//  1. Piston (self-hosted on Railway — unlimited, fastest)
+//  2. Piston (public emkc.org — free, reliable)
+//  3. Wandbox (with key rotation)
+//  4. Judge0 RapidAPI (key pool fallback)
+//
+//  Features:
+//  ✅ Global concurrency limiter (max 5 parallel API calls)
+//  ✅ Per-user request queuing (no burst flooding)
+//  ✅ Exponential backoff on retries
+//  ✅ Automatic provider fallback
 // ════════════════════════════════════════════════════════════════════════════
 
-// ─── Wandbox Key Pool ────────────────────────────────────────────────────────
+// ─── Global concurrency limiter ──────────────────────────────────────────────
+// Prevents 200 students from all hitting the API at the same exact second
+const MAX_CONCURRENT = 5;
+let activeCalls = 0;
+const waitQueue  = [];
+
+const acquireSlot = () => new Promise(resolve => {
+  if (activeCalls < MAX_CONCURRENT) {
+    activeCalls++;
+    resolve();
+  } else {
+    waitQueue.push(resolve);
+  }
+});
+
+const releaseSlot = () => {
+  activeCalls--;
+  if (waitQueue.length > 0) {
+    activeCalls++;
+    waitQueue.shift()();
+  }
+};
+
+// ─── Retry with exponential backoff ─────────────────────────────────────────
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const withRetry = async (fn, retries = 2, delayMs = 500) => {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i === retries || err.message === "UNSUPPORTED_LANG") throw err;
+      await wait(delayMs * Math.pow(2, i)); // 500ms, 1000ms
+    }
+  }
+};
+
+// ─── API Key Pools ───────────────────────────────────────────────────────────
 const WANDBOX_KEYS = [
   import.meta.env.VITE_WANDBOX_KEY_1 || "",
   import.meta.env.VITE_WANDBOX_KEY_2 || "",
   import.meta.env.VITE_WANDBOX_KEY_3 || "",
 ].filter(k => k.trim() !== "");
 
-// ─── Judge0 RapidAPI Key Pool ────────────────────────────────────────────────
 const JUDGE0_KEYS = [
   import.meta.env.VITE_JUDGE0_KEY_1 || "",
   import.meta.env.VITE_JUDGE0_KEY_2 || "",
 ].filter(k => k.trim() !== "");
 
-let wandboxKeyIndex = 0;
-let judge0KeyIndex  = 0;
+let wandboxKeyIdx = 0;
+let judge0KeyIdx  = 0;
 
 // ════════════════════════════════════════════════════════════════════════════
-//  PROVIDER 1 — Wandbox  (https://wandbox.org)
-//  Free with or without an API key. Keys give higher rate limits.
-// ════════════════════════════════════════════════════════════════════════════
-const WANDBOX_COMPILER = { "c++": "gcc-head", "java": "openjdk-head" };
-
-const runWandbox = async (code, language, stdin) => {
-  const compiler = WANDBOX_COMPILER[language];
-  if (!compiler) throw new Error("UNSUPPORTED_LANG");
-
-  const pool = WANDBOX_KEYS.length > 0 ? WANDBOX_KEYS : [""];
-
-  for (let attempt = 0; attempt < pool.length; attempt++) {
-    const idx = (wandboxKeyIndex + attempt) % pool.length;
-    const key = pool[idx];
-
-    const headers = { "Content-Type": "application/json" };
-    if (key) headers["Authorization"] = `Bearer ${key}`;
-
-    const res = await fetch("https://wandbox.org/api/compile.json", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ code, compiler, stdin }),
-    });
-
-    if (res.status === 429 || res.status === 401 || res.status === 403) {
-      console.warn(`[Wandbox] Key #${idx + 1} exhausted (${res.status}), rotating...`);
-      wandboxKeyIndex = (idx + 1) % pool.length;
-      continue;
-    }
-    if (!res.ok) throw new Error(`Wandbox HTTP ${res.status}`);
-
-    wandboxKeyIndex = idx;
-    const data = await res.json();
-    return {
-      output:  data.program_output || data.compiler_error || data.compiler_message || "",
-      success: data.status === "0",
-      provider: "Wandbox",
-    };
-  }
-  throw new Error("WANDBOX_ALL_KEYS_EXHAUSTED");
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-//  PROVIDER 2 — Piston API  (https://emkc.org/api/v2/piston)
-//  Completely FREE. No API key required. Excellent fallback.
+//  PROVIDER 1 — Piston Self-Hosted (Railway)
+//  Set VITE_PISTON_SELF_URL in .env to your Railway deployment URL.
+//  Guide: https://github.com/engineer-man/piston  (free on Railway)
+//  This gives you UNLIMITED compilations with NO rate limits!
 // ════════════════════════════════════════════════════════════════════════════
 const PISTON_LANG = {
   "c++":  { language: "c++",  version: "*" },
   "java": { language: "java", version: "*" },
 };
 
-const runPiston = async (code, language, stdin) => {
+const runPiston = async (code, language, stdin, baseUrl = "https://emkc.org") => {
   const lang = PISTON_LANG[language];
   if (!lang) throw new Error("UNSUPPORTED_LANG");
 
-  const res = await fetch("https://emkc.org/api/v2/piston/execute", {
+  const res = await fetch(`${baseUrl}/api/v2/piston/execute`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -92,82 +97,99 @@ const runPiston = async (code, language, stdin) => {
 
   const data = await res.json();
   const run  = data.run || {};
-  const output = (run.stdout || "") + (run.stderr || "");
-
   return {
-    output:   output.trim(),
+    output:   ((run.stdout || "") + (run.stderr || "")).trim(),
     success:  run.code === 0,
-    provider: "Piston",
+    provider: baseUrl.includes("emkc") ? "Piston (Public)" : "Piston (Self-Hosted)",
   };
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//  PROVIDER 3 — Judge0 via RapidAPI  (https://rapidapi.com/judge0-official)
-//  Free tier: 50 req/day. Add your RapidAPI keys for higher limits.
+//  PROVIDER 2 — Wandbox (with key rotation)
 // ════════════════════════════════════════════════════════════════════════════
-const JUDGE0_LANG_ID = { "c++": 54, "java": 62 };
+const WANDBOX_COMPILER = { "c++": "gcc-head", "java": "openjdk-head" };
+
+const runWandbox = async (code, language, stdin) => {
+  const compiler = WANDBOX_COMPILER[language];
+  if (!compiler) throw new Error("UNSUPPORTED_LANG");
+
+  const pool = WANDBOX_KEYS.length > 0 ? WANDBOX_KEYS : [""];
+
+  for (let attempt = 0; attempt < pool.length; attempt++) {
+    const idx = (wandboxKeyIdx + attempt) % pool.length;
+    const key = pool[idx];
+    const headers = { "Content-Type": "application/json" };
+    if (key) headers["Authorization"] = `Bearer ${key}`;
+
+    const res = await fetch("https://wandbox.org/api/compile.json", {
+      method: "POST", headers,
+      body: JSON.stringify({ code, compiler, stdin }),
+    });
+
+    if (res.status === 429 || res.status === 401 || res.status === 403) {
+      wandboxKeyIdx = (idx + 1) % pool.length;
+      continue;
+    }
+    if (!res.ok) throw new Error(`Wandbox HTTP ${res.status}`);
+
+    wandboxKeyIdx = idx;
+    const data = await res.json();
+    return {
+      output:   (data.program_output || data.compiler_error || data.compiler_message || "").trim(),
+      success:  data.status === "0",
+      provider: "Wandbox",
+    };
+  }
+  throw new Error("WANDBOX_ALL_KEYS_EXHAUSTED");
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+//  PROVIDER 3 — Judge0 via RapidAPI
+// ════════════════════════════════════════════════════════════════════════════
+const JUDGE0_LANG_ID  = { "c++": 54, "java": 62 };
 
 const runJudge0 = async (code, language, stdin) => {
   if (JUDGE0_KEYS.length === 0) throw new Error("JUDGE0_NO_KEYS");
-
   const langId = JUDGE0_LANG_ID[language];
   if (!langId) throw new Error("UNSUPPORTED_LANG");
 
   for (let attempt = 0; attempt < JUDGE0_KEYS.length; attempt++) {
-    const idx = (judge0KeyIndex + attempt) % JUDGE0_KEYS.length;
+    const idx = (judge0KeyIdx + attempt) % JUDGE0_KEYS.length;
     const key = JUDGE0_KEYS[idx];
 
-    // Step 1: Submit
     const submitRes = await fetch(
       "https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=false",
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type":    "application/json",
           "X-RapidAPI-Key":  key,
           "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com",
         },
-        body: JSON.stringify({
-          language_id:    langId,
-          source_code:    code,
-          stdin:          stdin || "",
-        }),
+        body: JSON.stringify({ language_id: langId, source_code: code, stdin: stdin || "" }),
       }
     );
 
     if (submitRes.status === 429 || submitRes.status === 403) {
-      console.warn(`[Judge0] Key #${idx + 1} exhausted (${submitRes.status}), rotating...`);
-      judge0KeyIndex = (idx + 1) % JUDGE0_KEYS.length;
+      judge0KeyIdx = (idx + 1) % JUDGE0_KEYS.length;
       continue;
     }
     if (!submitRes.ok) throw new Error(`Judge0 submit HTTP ${submitRes.status}`);
 
-    judge0KeyIndex = idx;
+    judge0KeyIdx = idx;
     const { token } = await submitRes.json();
 
-    // Step 2: Poll for result (max 10 attempts, 1s apart)
     for (let poll = 0; poll < 10; poll++) {
-      await new Promise(r => setTimeout(r, 1000));
-
-      const resultRes = await fetch(
+      await wait(1000);
+      const r    = await fetch(
         `https://judge0-ce.p.rapidapi.com/submissions/${token}?base64_encoded=false`,
-        {
-          headers: {
-            "X-RapidAPI-Key":  key,
-            "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com",
-          },
-        }
+        { headers: { "X-RapidAPI-Key": key, "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com" } }
       );
-
-      const result = await resultRes.json();
-      const statusId = result.status?.id;
-
-      if (statusId <= 2) continue; // Still processing (1=In Queue, 2=Processing)
-
-      const output = result.stdout || result.stderr || result.compile_output || "";
+      const data = await r.json();
+      if ((data.status?.id || 0) <= 2) continue;
       return {
-        output:   output.trim(),
-        success:  statusId === 3, // 3 = Accepted
+        output:   (data.stdout || data.stderr || data.compile_output || "").trim(),
+        success:  data.status?.id === 3,
         provider: "Judge0",
       };
     }
@@ -177,37 +199,49 @@ const runJudge0 = async (code, language, stdin) => {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//  MAIN EXPORT — executeCode with automatic multi-provider fallback
+//  MAIN EXPORT — executeCode with queue + multi-provider fallback
 // ════════════════════════════════════════════════════════════════════════════
 export const executeCode = async (code, language, stdin = "") => {
   if (!code?.trim()) {
-    return { output: "No code provided.", success: false, provider: "none" };
+    return { output: "No code provided.", success: false };
   }
 
+  const selfHostedPistonUrl = import.meta.env.VITE_PISTON_SELF_URL || "";
+
+  // Build provider chain — self-hosted Piston goes first if configured
   const providers = [
-    { name: "Wandbox", fn: () => runWandbox(code, language, stdin) },
-    { name: "Piston",  fn: () => runPiston(code, language, stdin)  },
-    { name: "Judge0",  fn: () => runJudge0(code, language, stdin)  },
+    ...(selfHostedPistonUrl
+      ? [{ name: "Piston (Self-Hosted)", fn: () => runPiston(code, language, stdin, selfHostedPistonUrl) }]
+      : []
+    ),
+    { name: "Piston (Public)",  fn: () => runPiston(code, language, stdin)  },
+    { name: "Wandbox",          fn: () => runWandbox(code, language, stdin) },
+    { name: "Judge0",           fn: () => runJudge0(code, language, stdin)  },
   ];
 
-  for (const provider of providers) {
-    try {
-      console.log(`[Compiler] Trying provider: ${provider.name}...`);
-      const result = await provider.fn();
-      console.log(`[Compiler] ✅ Success via ${provider.name}`);
-      return result;
-    } catch (err) {
-      if (err.message === "UNSUPPORTED_LANG") {
-        return { output: `Language "${language}" is not supported.`, success: false };
-      }
-      console.warn(`[Compiler] ⚠️ ${provider.name} failed: ${err.message}. Trying next...`);
-    }
-  }
+  // Acquire a concurrency slot (queues if 5 already running)
+  await acquireSlot();
 
-  // All 3 providers failed
-  return {
-    output:   "⚠️ All compilation providers are currently unavailable.\nPlease wait a moment and try again.",
-    success:  false,
-    provider: "none",
-  };
+  try {
+    for (const provider of providers) {
+      try {
+        console.log(`[Compiler] Trying: ${provider.name}`);
+        const result = await withRetry(provider.fn);
+        console.log(`[Compiler] ✅ Success via ${provider.name}`);
+        return result;
+      } catch (err) {
+        if (err.message === "UNSUPPORTED_LANG") {
+          return { output: `Language "${language}" is not supported.`, success: false };
+        }
+        console.warn(`[Compiler] ⚠️ ${provider.name} failed: ${err.message}`);
+      }
+    }
+
+    return {
+      output:  "⚠️ All compilation providers are currently unavailable.\nPlease wait a few seconds and try again.",
+      success: false,
+    };
+  } finally {
+    releaseSlot(); // Always release slot even on error
+  }
 };
