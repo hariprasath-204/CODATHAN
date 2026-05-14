@@ -1,12 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../../firebase';
-import { collection, query, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, limit, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import Editor from '@monaco-editor/react';
+import { Trash2 } from 'lucide-react';
 
 export default function Monitoring() {
   const [logs, setLogs] = useState([]);
   const [userCodes, setUserCodes] = useState([]);
   const [selectedCode, setSelectedCode] = useState(null);
+  const [clearing, setClearing] = useState(false);
+
+  const clearAllLogs = async () => {
+    if (!window.confirm('Clear all breaking news logs? This cannot be undone.')) return;
+    setClearing(true);
+    const snap = await getDocs(collection(db, 'logs'));
+    await Promise.all(snap.docs.map(d => deleteDoc(doc(db, 'logs', d.id))));
+    setClearing(false);
+  };
 
   useEffect(() => {
     // Listen to latest logs (Breaking News)
@@ -31,7 +41,18 @@ export default function Monitoring() {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem', height: 'calc(100vh - 4rem)' }}>
       {/* Breaking News Feed */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <h2 style={{ marginBottom: '1rem', color: 'var(--accent-danger)' }}>Breaking News (Flags)</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+          <h2 style={{ color: 'var(--accent-danger)' }}>Breaking News (Flags)</h2>
+          <button
+            className="danger"
+            onClick={clearAllLogs}
+            disabled={clearing || logs.length === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+          >
+            <Trash2 size={14} />
+            {clearing ? 'Clearing...' : 'Clear All'}
+          </button>
+        </div>
         <div className="glass-panel" style={{ flex: 1, padding: '1rem', overflowY: 'auto' }}>
           {logs.map(log => (
             <div key={log.id} style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', marginBottom: '0.5rem' }}>

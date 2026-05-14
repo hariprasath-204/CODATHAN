@@ -18,7 +18,29 @@ export default function EventDashboard() {
   
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [language, setLanguage] = useState('c++');
-  const [code, setCode] = useState('');
+
+  // Default starter code templates
+  const STARTER_CODE = {
+    'c++': `#include <iostream>
+using namespace std;
+
+int main() {
+    // Write your solution here
+    
+    return 0;
+}`,
+    'java': `import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        // Write your solution here
+        
+    }
+}`,
+  };
+
+  const [code, setCode] = useState(STARTER_CODE['c++']);
   const [output, setOutput] = useState('');
   const [isCompiling, setIsCompiling] = useState(false);
   const [checkingHidden, setCheckingHidden] = useState(false);
@@ -406,7 +428,8 @@ export default function EventDashboard() {
                           className={isPassed ? "success flex-center" : (isLocked ? "secondary flex-center" : "primary flex-center")} 
                           onClick={() => {
                             setSelectedQuestion(q);
-                            setCode('');
+                            setCode(STARTER_CODE[q.language] || STARTER_CODE['c++']);
+                            setLanguage(q.language || 'c++');
                             setOutput('');
                             setViewMode('editor');
                           }}
