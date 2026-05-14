@@ -107,6 +107,15 @@ export default function EventDashboard() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleCheatDetection);
 
+    // Keep-alive ping for self-hosted Piston on Render (prevents sleep)
+    const pistonUrl = import.meta.env.VITE_PISTON_SELF_URL;
+    let keepAliveInterval = null;
+    if (pistonUrl) {
+      const ping = () => fetch(`${pistonUrl}/api/v2/runtimes`).catch(() => {});
+      ping(); // ping immediately on load
+      keepAliveInterval = setInterval(ping, 8 * 60 * 1000); // every 8 minutes
+    }
+
     setTimeout(() => setShowWelcome(false), 3000);
 
     return () => {
@@ -115,6 +124,7 @@ export default function EventDashboard() {
       unsubCode();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleCheatDetection);
+      if (keepAliveInterval) clearInterval(keepAliveInterval);
     };
   }, [navigate]);
 
