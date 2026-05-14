@@ -16,8 +16,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 // ─── Global concurrency limiter ──────────────────────────────────────────────
-// Prevents 200 students from all hitting the API at the same exact second
-const MAX_CONCURRENT = 5;
+const MAX_CONCURRENT = 10; // Increased for 500+ users
 let activeCalls = 0;
 const waitQueue  = [];
 
@@ -35,6 +34,33 @@ const releaseSlot = () => {
   if (waitQueue.length > 0) {
     activeCalls++;
     waitQueue.shift()();
+  }
+};
+
+// ─── Response Cache (30s TTL) ────────────────────────────────────────────────
+// If two students submit identical code, the second gets instant result
+// without hitting the API at all — saves quota and speeds up response
+const responseCache = new Map();
+const CACHE_TTL_MS  = 30 * 1000; // 30 seconds
+
+const getCacheKey = (code, language, stdin) =>
+  `${language}::${stdin}::${code}`;
+
+const getCached = (key) => {
+  const entry = responseCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+    responseCache.delete(key);
+    return null;
+  }
+  return entry.result;
+};
+
+const setCache = (key, result) => {
+  responseCache.set(key, { result, ts: Date.now() });
+  // Limit cache size to 200 entries
+  if (responseCache.size > 200) {
+    responseCache.delete(responseCache.keys().next().value);
   }
 };
 
@@ -206,6 +232,14 @@ export const executeCode = async (code, language, stdin = "") => {
     return { output: "No code provided.", success: false };
   }
 
+  // Check cache first — instant response, no API call needed
+  const cacheKey = getCacheKey(code, language, stdin);
+  const cached   = getCached(cacheKey);
+  if (cached) {
+    console.log("[Compiler] ⚡ Cache hit — returning instant result");
+    return cached;
+  }
+
   const selfHostedPistonUrl = import.meta.env.VITE_PISTON_SELF_URL || "";
 
   // ⚡ KEY INSIGHT: Wandbox goes FIRST because each student has their OWN IP
@@ -230,6 +264,7 @@ export const executeCode = async (code, language, stdin = "") => {
         console.log(`[Compiler] Trying: ${provider.name}`);
         const result = await withRetry(provider.fn);
         console.log(`[Compiler] ✅ Success via ${provider.name}`);
+        setCache(cacheKey, result); // cache for next identical request
         return result;
       } catch (err) {
         if (err.message === "UNSUPPORTED_LANG") {
