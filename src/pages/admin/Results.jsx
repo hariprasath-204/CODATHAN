@@ -2,9 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { db } from '../../firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import LoadingOverlay from '../../components/LoadingOverlay';
-import { FileDown, AlertTriangle } from 'lucide-react';
+import { FileDown } from 'lucide-react';
 
 export default function Results() {
   const [users, setUsers]      = useState([]);
@@ -77,56 +76,79 @@ export default function Results() {
       doc.text(`${w.totalPoints || 0} pts`, x + 29, y + 20, { align: 'center' });
     });
 
-    // ─── Full standings table ─────────────────────────────────────────────────
-    const tableData = users.map((user, idx) => [
-      idx + 1,
-      user.id,
-      user.name || '-',
-      user.totalPoints || 0,
-      user.completedQuestions || 0,
-      user.totalSubmissions || 0,
-      user.flags || 0,
-    ]);
+    // ─── Full standings table (drawn manually — no plugin needed) ─────────────
+    const cols   = [10, 25, 55, 110, 135, 155, 175]; // x positions
+    const widths = [15, 30, 55,  25,  20,  20,  20]; // col widths
+    const heads  = ['#', 'Lot No', 'Name', 'Points', 'Solved', 'Submits', 'Flags'];
+    const ROW_H  = 8;
+    const PAGE_H = 280;
+    let y = 70;
 
-    autoTable(doc, {
-      startY: 68,
-      head: [['#', 'Lot No', 'Name', 'Points', 'Solved', 'Submissions', 'Flags']],
-      body: tableData,
-      theme: 'grid',
-      headStyles: {
-        fillColor: [0, 0, 0],
-        textColor: [0, 255, 0],
-        fontStyle: 'bold',
-        lineWidth: 0.3,
-        lineColor: [0, 200, 0],
-      },
-      bodyStyles: {
-        textColor: [30, 30, 30],
-        lineColor: [200, 200, 200],
-        lineWidth: 0.2,
-      },
-      alternateRowStyles: { fillColor: [240, 255, 240] },
-      columnStyles: {
-        0: { halign: 'center', cellWidth: 12 },
-        1: { fontStyle: 'bold' },
-        3: { halign: 'center', textColor: [0, 150, 0], fontStyle: 'bold' },
-        4: { halign: 'center' },
-        5: { halign: 'center' },
-        6: { halign: 'center' },
-      },
-      didDrawCell: (data) => {
-        // Highlight flag cells red if > 0
-        if (data.section === 'body' && data.column.index === 6) {
-          const val = parseInt(data.cell.raw);
-          if (val > 0) {
-            data.doc.setTextColor(200, 0, 0);
-            data.doc.setFont('helvetica', 'bold');
-          }
+    const drawRow = (cells, isHead, isAlt, isFlagged) => {
+      // background
+      if (isHead) {
+        doc.setFillColor(0, 0, 0);
+      } else if (isAlt) {
+        doc.setFillColor(240, 255, 240);
+      } else {
+        doc.setFillColor(255, 255, 255);
+      }
+      doc.rect(10, y, 190, ROW_H, 'F');
+
+      // border
+      doc.setDrawColor(180, 180, 180);
+      doc.setLineWidth(0.2);
+      doc.rect(10, y, 190, ROW_H, 'S');
+
+      // text
+      cells.forEach((cell, ci) => {
+        const cellStr = String(cell);
+        if (isHead) {
+          doc.setTextColor(0, 220, 0);
+          doc.setFont('helvetica', 'bold');
+        } else if (ci === 3) {
+          doc.setTextColor(0, 130, 0);
+          doc.setFont('helvetica', 'bold');
+        } else if (ci === 6 && isFlagged) {
+          doc.setTextColor(200, 0, 0);
+          doc.setFont('helvetica', 'bold');
+        } else {
+          doc.setTextColor(30, 30, 30);
+          doc.setFont('helvetica', 'normal');
         }
-      },
+        doc.setFontSize(8);
+        // center numeric cols, left-align text
+        const cx = ci >= 3 ? cols[ci] + widths[ci] / 2 : cols[ci] + 1;
+        const align = ci >= 3 ? 'center' : 'left';
+        doc.text(cellStr, cx, y + 5.5, { align });
+      });
+      y += ROW_H;
+    };
+
+    // header row
+    drawRow(heads, true, false, false);
+
+    // data rows
+    users.forEach((user, idx) => {
+      if (y + ROW_H > PAGE_H) {
+        // add page footer then new page
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`Page ${doc.internal.getCurrentPageInfo().pageNumber}  —  CODATHAN 2K27`, 105, 290, { align: 'center' });
+        doc.addPage();
+        y = 15;
+        drawRow(heads, true, false, false); // repeat header on new page
+      }
+      drawRow(
+        [idx + 1, user.id, user.name || '-', user.totalPoints || 0,
+         user.completedQuestions || 0, user.totalSubmissions || 0, user.flags || 0],
+        false,
+        idx % 2 === 1,
+        (user.flags || 0) > 0
+      );
     });
 
-    // ─── Footer ───────────────────────────────────────────────────────────────
+    // ─── Footer on all pages ──────────────────────────────────────────────────
     const pageCount = doc.internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
