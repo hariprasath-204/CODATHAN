@@ -18,6 +18,7 @@ import Results from './pages/admin/Results';
 import Submissions from './pages/admin/Submissions';
 import LiveCode from './pages/admin/LiveCode';
 import Languages from './pages/admin/Languages';
+import ResetData from './pages/admin/ResetData';
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
           <Route path="submissions" element={<Submissions />} />
           <Route path="livecode" element={<LiveCode />} />
           <Route path="languages" element={<Languages />} />
+          <Route path="reset" element={<ResetData />} />
         </Route>
       </Routes>
     </Router>

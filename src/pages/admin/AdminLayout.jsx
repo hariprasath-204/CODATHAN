@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Trophy, Clock, FileText, Users, Activity, FileDown, Code2, AlertOctagon, X, RefreshCw, MonitorPlay, Settings2 } from 'lucide-react';
+import { Trophy, Clock, FileText, Users, Activity, FileDown, Code2, AlertOctagon, X, RefreshCw, MonitorPlay, Settings2, Trash2 } from 'lucide-react';
 
 export default function AdminLayout() {
   const navigate = useNavigate();
@@ -15,6 +15,7 @@ export default function AdminLayout() {
     { path: 'submissions', icon: <Code2 size={20} />,       label: 'Submissions' },
     { path: 'livecode',    icon: <MonitorPlay size={20} />, label: 'Live Code' },
     { path: 'languages',   icon: <Settings2 size={20} />,   label: 'Language Settings' },
+    { path: 'reset',       icon: <Trash2 size={20} color="var(--accent-danger)" />, label: 'Reset Data' },
   ];
 
   const [latestLogs, setLatestLogs] = useState([]);
