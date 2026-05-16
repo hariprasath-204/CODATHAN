@@ -1,21 +1,21 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg-primary: #2b2d42;
-  --bg-secondary: rgba(141, 153, 174, 0.2);
-  --bg-tertiary: rgba(141, 153, 174, 0.3);
+  --bg-primary: #09090b;
+  --bg-secondary: rgba(24, 24, 27, 0.6);
+  --bg-tertiary: rgba(39, 39, 42, 0.8);
   
-  --text-primary: #edf2f4;
-  --text-secondary: #8d99ae;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
   
-  --accent-primary: #ef233c; 
-  --accent-hover: #d90429;
-  --accent-success: #10b981; 
-  --accent-danger: #ef233c; 
-  --accent-warning: #f59e0b; 
+  --accent-primary: #6366f1; /* Indigo */
+  --accent-hover: #4f46e5;
+  --accent-success: #10b981; /* Green */
+  --accent-danger: #ef4444; /* Red */
+  --accent-warning: #f59e0b; /* Amber/Gold */
   
-  --glass-bg: rgba(43, 45, 66, 0.6);
-  --glass-border: rgba(141, 153, 174, 0.2);
+  --glass-bg: rgba(24, 24, 27, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.1);
   --glass-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.2);
   
   --font-main: 'Inter', sans-serif;
@@ -35,7 +35,6 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
-  cursor: url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23ef233c%22%20stroke%3D%22white%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m3%203%207.07%2016.97%202.51-7.39%207.39-2.51L3%203z%22%2F%3E%3C%2Fsvg%3E'), auto;
 }
 
 /* Glassmorphism Utilities */
@@ -79,7 +78,7 @@ input, select, textarea {
 
 input:focus, select:focus, textarea:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(239, 35, 60, 0.2);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
 }
 
 button {
@@ -100,25 +99,25 @@ button:disabled {
 }
 
 button.primary {
-  background: linear-gradient(135deg, #ef233c, #d90429);
-  color: #edf2f4;
-  box-shadow: 0 4px 14px 0 rgba(239, 35, 60, 0.39);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
 }
 
 button.primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(239, 35, 60, 0.5);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
 }
 
 button.secondary {
-  background: rgba(237, 242, 244, 0.05);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   border: 1px solid var(--glass-border);
 }
 
 button.secondary:hover:not(:disabled) {
-  background: rgba(237, 242, 244, 0.1);
-  border-color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--text-secondary);
 }
 
 button.success {
@@ -127,7 +126,7 @@ button.success {
 }
 
 button.danger {
-  background: linear-gradient(135deg, #ef233c, #d90429);
+  background: linear-gradient(135deg, #ef4444, #dc2626);
   color: #fff;
 }
 
@@ -164,15 +163,9 @@ button.danger {
   width: 100vw;
   height: 100vh;
   z-index: -1;
-  background: radial-gradient(circle at 15% 50%, rgba(239, 35, 60, 0.08), transparent 25%),
-              radial-gradient(circle at 85% 30%, rgba(141, 153, 174, 0.08), transparent 25%);
+  background: radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.08), transparent 25%),
+              radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.08), transparent 25%);
   overflow: hidden;
-  animation: pulseBg 10s ease-in-out infinite alternate;
-}
-
-@keyframes pulseBg {
-  0% { transform: scale(1); opacity: 0.8; }
-  100% { transform: scale(1.1); opacity: 1; }
 }
 
 /* Typography */
@@ -187,7 +180,7 @@ h2 { font-size: 2.5rem; }
 h3 { font-size: 2rem; }
 
 .text-gradient {
-  background: linear-gradient(135deg, #ef233c, #8d99ae);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   font-weight: 700;
@@ -203,7 +196,7 @@ h3 { font-size: 2rem; }
 .hacker-header-panel {
   border: 1px solid var(--glass-border);
   padding: 1.5rem 4rem;
-  background: rgba(237, 242, 244, 0.02);
+  background: rgba(255, 255, 255, 0.02);
   border-radius: 12px;
   position: relative;
   overflow: hidden;
@@ -213,7 +206,7 @@ h3 { font-size: 2rem; }
   font-family: var(--font-heading);
   font-size: 4rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #edf2f4, #8d99ae);
+  background: linear-gradient(135deg, #f8fafc, #94a3b8);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 0.5rem;
@@ -229,8 +222,8 @@ h3 { font-size: 2rem; }
 }
 
 .hacker-button {
-  background: linear-gradient(135deg, #ef233c, #d90429);
-  color: #edf2f4;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
   border: none;
   padding: 1rem 3rem;
   font-size: 1.1rem;
@@ -239,10 +232,10 @@ h3 { font-size: 2rem; }
   text-transform: uppercase;
   transition: all 0.2s ease;
   cursor: pointer;
-  box-shadow: 0 4px 14px 0 rgba(239, 35, 60, 0.39);
+  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
 }
 
 .hacker-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(239, 35, 60, 0.5);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
 }
