@@ -36,8 +36,8 @@ export default function LoadingOverlay({ message = "Loading..." }) {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Green text
-      ctx.fillStyle = '#00ff00';
+      // Red text
+      ctx.fillStyle = '#ef233c';
       ctx.font = fontSize + 'px monospace';
 
       for (let i = 0; i < rainDrops.length; i++) {
@@ -100,7 +100,7 @@ export default function LoadingOverlay({ message = "Loading..." }) {
           alignItems: 'center',
           gap: '1.5rem',
           border: '1px solid var(--accent-primary)',
-          boxShadow: '0 0 30px rgba(0, 255, 0, 0.2)',
+          boxShadow: '0 0 30px rgba(239, 35, 60, 0.2)',
           background: 'rgba(0, 0, 0, 0.6)',
           backdropFilter: 'blur(10px)'
         }}
