@@ -268,7 +268,8 @@ export default function EventDashboard() {
       
       await setDoc(doc(db, 'users', lotNo), {
         completedQuestions: increment(1),
-        totalPoints: increment(selectedQuestion.points)
+        totalPoints: increment(selectedQuestion.points),
+        lastSubmitTime: new Date()
       }, { merge: true });
 
       setLoadingOverlayMsg('Success! Returning to Missions...');

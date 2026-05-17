@@ -15,6 +15,7 @@ export default function AdminLayout() {
     { path: 'submissions', icon: <Code2 size={20} />,       label: 'Submissions' },
     { path: 'livecode',    icon: <MonitorPlay size={20} />, label: 'Live Code' },
     { path: 'languages',   icon: <Settings2 size={20} />,   label: 'Language Settings' },
+    { path: 'conclusion',  icon: <Trophy size={20} />,      label: 'Conclusion' },
     { path: 'reset',       icon: <Trash2 size={20} color="var(--accent-danger)" />, label: 'Reset Data' },
   ];
 

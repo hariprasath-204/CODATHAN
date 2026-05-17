@@ -19,6 +19,8 @@ import Submissions from './pages/admin/Submissions';
 import LiveCode from './pages/admin/LiveCode';
 import Languages from './pages/admin/Languages';
 import ResetData from './pages/admin/ResetData';
+import Conclusion from './pages/admin/Conclusion';
+import FinalWinners from './pages/admin/FinalWinners';
 
 function App() {
   return (
@@ -43,8 +45,10 @@ function App() {
           <Route path="submissions" element={<Submissions />} />
           <Route path="livecode" element={<LiveCode />} />
           <Route path="languages" element={<Languages />} />
+          <Route path="conclusion" element={<Conclusion />} />
           <Route path="reset" element={<ResetData />} />
         </Route>
+        <Route path="/admin/final-winners" element={<FinalWinners />} />
       </Routes>
     </Router>
   );

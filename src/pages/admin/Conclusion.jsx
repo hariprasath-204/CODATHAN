@@ -1,125 +1,100 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../../firebase';
-import { collection, query, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
+import LoadingOverlay from '../../components/LoadingOverlay';
+import { ExternalLink } from 'lucide-react';
 
 export default function Conclusion() {
   const [users, setUsers] = useState([]);
-  const [userCodes, setUserCodes] = useState([]);
-  const [selectedUser, setSelectedUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const qUsers = query(collection(db, 'users'));
-    const unsubUsers = onSnapshot(qUsers, (snapshot) => {
+    const q = collection(db, 'users');
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       let fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Complex sorting logic:
+      // 1. Flag (disqualified) goes to bottom
+      // 2. Points (descending)
+      // 3. Timer (Last Submit Time) (ascending)
+      // 4. Questions Solved (descending)
       fetchedUsers.sort((a, b) => {
-        if ((b.totalPoints || 0) !== (a.totalPoints || 0)) return (b.totalPoints || 0) - (a.totalPoints || 0);
-        if ((b.completedQuestions || 0) !== (a.completedQuestions || 0)) return (b.completedQuestions || 0) - (a.completedQuestions || 0);
-        return (a.flags || 0) - (b.flags || 0);
+        const aFlag = (a.flags || 0) > 0 ? 1 : 0;
+        const bFlag = (b.flags || 0) > 0 ? 1 : 0;
+        if (aFlag !== bFlag) return aFlag - bFlag;
+
+        const aPoints = a.totalPoints || 0;
+        const bPoints = b.totalPoints || 0;
+        if (aPoints !== bPoints) return bPoints - aPoints;
+
+        const aTime = a.lastSubmitTime ? (a.lastSubmitTime.toMillis ? a.lastSubmitTime.toMillis() : a.lastSubmitTime) : Infinity;
+        const bTime = b.lastSubmitTime ? (b.lastSubmitTime.toMillis ? b.lastSubmitTime.toMillis() : b.lastSubmitTime) : Infinity;
+        if (aTime !== bTime) return aTime - bTime;
+
+        const aQs = a.completedQuestions || 0;
+        const bQs = b.completedQuestions || 0;
+        return bQs - aQs;
       });
-      setUsers(fetchedUsers);
+
+      // Get top 35 only
+      setUsers(fetchedUsers.slice(0, 35));
       setLoading(false);
     });
 
-    const qCodes = query(collection(db, 'user_code'));
-    const unsubCodes = onSnapshot(qCodes, (snapshot) => {
-      setUserCodes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    return () => {
-      unsubUsers();
-      unsubCodes();
-    };
+    return () => unsubscribe();
   }, []);
 
+  const launchWinners = () => {
+    window.open('/admin/final-winners', '_blank');
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <h2 style={{ marginBottom: '1.5rem' }}>Winner Conclusion</h2>
+    <div>
+      {loading && <LoadingOverlay message="Loading Top 35 Winners..." />}
       
-      <div style={{ display: 'flex', gap: '2rem', flex: 1, overflow: 'hidden' }}>
-        {/* Left Panel: User List */}
-        <div style={{ flex: '1', borderRight: '1px solid var(--glass-border)', paddingRight: '1rem', overflowY: 'auto' }}>
-          <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>PARTICIPANTS</h3>
-          {loading ? (
-            <p style={{ color: 'var(--text-secondary)' }}>Loading...</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {users.map(user => (
-                <button 
-                  key={user.id} 
-                  onClick={() => setSelectedUser(user)}
-                  className={selectedUser?.id === user.id ? 'primary' : 'secondary'}
-                  style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', padding: '1rem' }}
-                >
-                  <span style={{ fontWeight: 600 }}>{user.id} - {user.name || 'Unknown'}</span>
-                  <span style={{ color: user.flags > 0 ? 'var(--accent-danger)' : 'var(--accent-success)' }}>
-                    {user.totalPoints || 0} pts
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        
-        {/* Right Panel: Conclusion Details */}
-        <div style={{ flex: '2', paddingLeft: '1rem', overflowY: 'auto' }}>
-          {selectedUser ? (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                <div>
-                  <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '2rem' }}>{selectedUser.name || 'Unknown User'}</h2>
-                  <span style={{ color: 'var(--text-secondary)' }}>LOT / ROLL NO: {selectedUser.id}</span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Total Points</span>
-                  <h2 style={{ margin: 0, fontSize: '3rem', color: 'var(--accent-success)' }}>{selectedUser.totalPoints || 0}</h2>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
-                <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center' }}>
-                  <div style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Questions Solved</div>
-                  <div style={{ fontSize: '2rem', color: 'var(--accent-primary)', fontWeight: 600 }}>{selectedUser.completedQuestions || 0}</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center', borderColor: selectedUser.flags > 0 ? 'var(--accent-danger)' : 'var(--glass-border)' }}>
-                  <div style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Cheating Flags</div>
-                  <div style={{ fontSize: '2rem', color: selectedUser.flags > 0 ? 'var(--accent-danger)' : 'var(--accent-success)', fontWeight: 600 }}>
-                    {selectedUser.flags || 0}
-                  </div>
-                </div>
-              </div>
-
-              <h3 style={{ marginBottom: '1rem' }}>Submission History</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {userCodes.filter(uc => uc.lotNo === selectedUser.id).length === 0 ? (
-                  <p style={{ color: 'var(--text-secondary)' }}>No submissions recorded.</p>
-                ) : (
-                  userCodes
-                    .filter(uc => uc.lotNo === selectedUser.id)
-                    .map((uc, i) => (
-                      <div key={i} className="glass-panel" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Question ID: {uc.questionId}</div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Language: {uc.language?.toUpperCase()}</div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                          {uc.passed ? (
-                            <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-success)', padding: '0.3rem 0.8rem', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 600 }}>PASSED</span>
-                          ) : (
-                            <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--accent-danger)', padding: '0.3rem 0.8rem', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 600 }}>FAILED</span>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                )}
-              </div>
-            </div>
-          ) : (
-            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-              Select a participant from the left to view their detailed conclusion.
-            </div>
-          )}
-        </div>
+      <div className="flex-between" style={{ marginBottom: '2rem' }}>
+        <h2>Event Conclusion (Top 35)</h2>
+        <button className="primary flex-center" onClick={launchWinners}>
+          Launch Final 3 Winners <ExternalLink size={16} style={{ marginLeft: '0.5rem' }} />
+        </button>
+      </div>
+      
+      <div className="glass-panel" style={{ overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <thead>
+            <tr style={{ background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--glass-border)' }}>
+              <th style={{ padding: '1rem' }}>Rank</th>
+              <th style={{ padding: '1rem' }}>Lot No</th>
+              <th style={{ padding: '1rem' }}>Total Points</th>
+              <th style={{ padding: '1rem' }}>Questions Solved</th>
+              <th style={{ padding: '1rem' }}>Last Submit Time</th>
+              <th style={{ padding: '1rem' }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user, idx) => {
+              return (
+              <tr key={user.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                <td style={{ padding: '1rem' }}>
+                  {idx === 0 ? '🥇 1st' : idx === 1 ? '🥈 2nd' : idx === 2 ? '🥉 3rd' : `#${idx + 1}`}
+                </td>
+                <td style={{ padding: '1rem', fontWeight: 'bold' }}>{user.id}</td>
+                <td style={{ padding: '1rem', color: 'var(--accent-success)', fontWeight: 'bold' }}>{user.totalPoints || 0}</td>
+                <td style={{ padding: '1rem' }}>{user.completedQuestions || 0}</td>
+                <td style={{ padding: '1rem' }}>{user.lastSubmitTime ? new Date(user.lastSubmitTime.toMillis ? user.lastSubmitTime.toMillis() : user.lastSubmitTime).toLocaleTimeString() : 'N/A'}</td>
+                <td style={{ padding: '1rem', color: user.flags > 0 ? 'var(--accent-danger)' : 'var(--accent-success)' }}>
+                  {user.flags > 0 ? 'Disqualified' : 'Qualified'}
+                </td>
+              </tr>
+              );
+            })}
+            {users.length === 0 && (
+              <tr>
+                <td colSpan="6" style={{ padding: '2rem', textAlign: 'center' }}>No users found.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

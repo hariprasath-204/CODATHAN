@@ -8,9 +8,34 @@ export default function Leaderboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'users'), orderBy('totalPoints', 'desc'));
+    const q = collection(db, 'users');
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      let fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Complex sorting logic:
+      // 1. Flag (disqualified) goes to bottom
+      // 2. Points (descending)
+      // 3. Timer (Last Submit Time) (ascending)
+      // 4. Questions Solved (descending)
+      fetchedUsers.sort((a, b) => {
+        const aFlag = (a.flags || 0) > 0 ? 1 : 0;
+        const bFlag = (b.flags || 0) > 0 ? 1 : 0;
+        if (aFlag !== bFlag) return aFlag - bFlag;
+
+        const aPoints = a.totalPoints || 0;
+        const bPoints = b.totalPoints || 0;
+        if (aPoints !== bPoints) return bPoints - aPoints;
+
+        const aTime = a.lastSubmitTime ? (a.lastSubmitTime.toMillis ? a.lastSubmitTime.toMillis() : a.lastSubmitTime) : Infinity;
+        const bTime = b.lastSubmitTime ? (b.lastSubmitTime.toMillis ? b.lastSubmitTime.toMillis() : b.lastSubmitTime) : Infinity;
+        if (aTime !== bTime) return aTime - bTime;
+
+        const aQs = a.completedQuestions || 0;
+        const bQs = b.completedQuestions || 0;
+        return bQs - aQs;
+      });
+
+      setUsers(fetchedUsers);
       setLoading(false);
     });
 
@@ -30,7 +55,7 @@ export default function Leaderboard() {
               <th style={{ padding: '1rem' }}>Lot No</th>
               <th style={{ padding: '1rem' }}>Total Points</th>
               <th style={{ padding: '1rem' }}>Questions Solved</th>
-              <th style={{ padding: '1rem' }}>Accuracy %</th>
+              <th style={{ padding: '1rem' }}>Last Submit Time</th>
               <th style={{ padding: '1rem' }}>Flags (Cheat)</th>
               <th style={{ padding: '1rem' }}>Login Count</th>
             </tr>
@@ -44,8 +69,8 @@ export default function Leaderboard() {
                 <td style={{ padding: '1rem', fontWeight: 'bold' }}>{user.id}</td>
                 <td style={{ padding: '1rem', color: 'var(--accent-success)', fontWeight: 'bold' }}>{user.totalPoints || 0}</td>
                 <td style={{ padding: '1rem' }}>{user.completedQuestions || 0}</td>
-                <td style={{ padding: '1rem' }}>{accuracy}%</td>
-                <td style={{ padding: '1rem', color: user.flags > 0 ? 'var(--accent-danger)' : 'inherit' }}>{user.flags || 0}</td>
+                <td style={{ padding: '1rem' }}>{user.lastSubmitTime ? new Date(user.lastSubmitTime.toMillis ? user.lastSubmitTime.toMillis() : user.lastSubmitTime).toLocaleTimeString() : 'N/A'}</td>
+                <td style={{ padding: '1rem', color: user.flags > 0 ? 'var(--accent-danger)' : 'inherit' }}>{user.flags > 0 ? `Disqualified (${user.flags})` : 0}</td>
                 <td style={{ padding: '1rem' }}>{user.loginCount || 0}</td>
               </tr>
               );
