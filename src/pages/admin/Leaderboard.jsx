@@ -8,18 +8,9 @@ export default function Leaderboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'users'));
+    const q = query(collection(db, 'users'), orderBy('totalPoints', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      let fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // Sort logic: totalPoints (desc) -> completedQuestions (desc) -> flags (asc)
-      fetchedUsers.sort((a, b) => {
-        if ((b.totalPoints || 0) !== (a.totalPoints || 0)) return (b.totalPoints || 0) - (a.totalPoints || 0);
-        if ((b.completedQuestions || 0) !== (a.completedQuestions || 0)) return (b.completedQuestions || 0) - (a.completedQuestions || 0);
-        return (a.flags || 0) - (b.flags || 0);
-      });
-      
-      setUsers(fetchedUsers);
+      setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
     });
 
@@ -39,18 +30,21 @@ export default function Leaderboard() {
               <th style={{ padding: '1rem' }}>Lot No</th>
               <th style={{ padding: '1rem' }}>Total Points</th>
               <th style={{ padding: '1rem' }}>Questions Solved</th>
+              <th style={{ padding: '1rem' }}>Accuracy %</th>
               <th style={{ padding: '1rem' }}>Flags (Cheat)</th>
               <th style={{ padding: '1rem' }}>Login Count</th>
             </tr>
           </thead>
           <tbody>
             {users.map((user, idx) => {
+              const accuracy = user.totalSubmissions ? Math.round((user.completedQuestions || 0) / user.totalSubmissions * 100) : 0;
               return (
               <tr key={user.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                 <td style={{ padding: '1rem' }}>{idx + 1}</td>
                 <td style={{ padding: '1rem', fontWeight: 'bold' }}>{user.id}</td>
                 <td style={{ padding: '1rem', color: 'var(--accent-success)', fontWeight: 'bold' }}>{user.totalPoints || 0}</td>
                 <td style={{ padding: '1rem' }}>{user.completedQuestions || 0}</td>
+                <td style={{ padding: '1rem' }}>{accuracy}%</td>
                 <td style={{ padding: '1rem', color: user.flags > 0 ? 'var(--accent-danger)' : 'inherit' }}>{user.flags || 0}</td>
                 <td style={{ padding: '1rem' }}>{user.loginCount || 0}</td>
               </tr>
