@@ -37,6 +37,9 @@ export default function Leaderboard() {
 
       setUsers(fetchedUsers);
       setLoading(false);
+    }, (error) => {
+      console.error("Error fetching leaderboard data:", error);
+      setLoading(false);
     });
 
     return () => unsubscribe();

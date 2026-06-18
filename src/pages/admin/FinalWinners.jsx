@@ -32,31 +32,36 @@ export default function FinalWinners() {
   useEffect(() => {
     const fetchWinners = async () => {
       const q = collection(db, 'users');
-      const snapshot = await getDocs(q);
-      let fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      fetchedUsers.sort((a, b) => {
-        const aFlag = (a.flags || 0) > 0 ? 1 : 0;
-        const bFlag = (b.flags || 0) > 0 ? 1 : 0;
-        if (aFlag !== bFlag) return aFlag - bFlag;
+      try {
+        const snapshot = await getDocs(q);
+        let fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        fetchedUsers.sort((a, b) => {
+          const aFlag = (a.flags || 0) > 0 ? 1 : 0;
+          const bFlag = (b.flags || 0) > 0 ? 1 : 0;
+          if (aFlag !== bFlag) return aFlag - bFlag;
 
-        const aPoints = a.totalPoints || 0;
-        const bPoints = b.totalPoints || 0;
-        if (aPoints !== bPoints) return bPoints - aPoints;
+          const aPoints = a.totalPoints || 0;
+          const bPoints = b.totalPoints || 0;
+          if (aPoints !== bPoints) return bPoints - aPoints;
 
-        const aTime = a.lastSubmitTime ? (a.lastSubmitTime.toMillis ? a.lastSubmitTime.toMillis() : a.lastSubmitTime) : Infinity;
-        const bTime = b.lastSubmitTime ? (b.lastSubmitTime.toMillis ? b.lastSubmitTime.toMillis() : b.lastSubmitTime) : Infinity;
-        if (aTime !== bTime) return aTime - bTime;
+          const aTime = a.lastSubmitTime ? (a.lastSubmitTime.toMillis ? a.lastSubmitTime.toMillis() : a.lastSubmitTime) : Infinity;
+          const bTime = b.lastSubmitTime ? (b.lastSubmitTime.toMillis ? b.lastSubmitTime.toMillis() : b.lastSubmitTime) : Infinity;
+          if (aTime !== bTime) return aTime - bTime;
 
-        const aQs = a.completedQuestions || 0;
-        const bQs = b.completedQuestions || 0;
-        return bQs - aQs;
-      });
+          const aQs = a.completedQuestions || 0;
+          const bQs = b.completedQuestions || 0;
+          return bQs - aQs;
+        });
 
-      // Filter out disqualified and get top 3
-      const top3 = fetchedUsers.filter(u => (u.flags || 0) === 0).slice(0, 3);
-      setWinners(top3);
-      setLoading(false);
+        // Filter out disqualified and get top 3
+        const top3 = fetchedUsers.filter(u => (u.flags || 0) === 0).slice(0, 3);
+        setWinners(top3);
+      } catch (error) {
+        console.error("Error fetching winners:", error);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchWinners();
