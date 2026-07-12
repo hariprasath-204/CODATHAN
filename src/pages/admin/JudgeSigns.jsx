@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, orderBy, query } from 'firebase/firestore';
-import { PenTool, Upload, Trash2, CheckCircle2, UserCheck, Image as ImageIcon } from 'lucide-react';
+import { PenTool, Upload, Trash2, CheckCircle2, Image as ImageIcon } from 'lucide-react';
 import LoadingOverlay from '../../components/LoadingOverlay';
 
 export default function JudgeSigns() {
   const [judges, setJudges] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [name, setName] = useState('');
-  const [designation, setDesignation] = useState('Staff / Judge Coordinator');
   const [previewImage, setPreviewImage] = useState(null);
   const [mode, setMode] = useState('upload'); // 'upload' or 'draw'
   const [saving, setSaving] = useState(false);
@@ -88,24 +86,17 @@ export default function JudgeSigns() {
 
   const handleSaveJudge = async (e) => {
     e.preventDefault();
-    if (!name.trim()) {
-      alert('Please enter the staff/judge name.');
-      return;
-    }
     if (!previewImage) {
-      alert('Please provide an e-signature (upload an image or draw one).');
+      alert('Please provide an e-signature image (upload an image or draw one on canvas).');
       return;
     }
 
     setSaving(true);
     try {
       await addDoc(collection(db, 'judge_signatures'), {
-        name: name.trim(),
-        designation: designation.trim(),
         signatureBase64: previewImage,
         createdAt: new Date(),
       });
-      setName('');
       setPreviewImage(null);
       if (canvasRef.current) {
         const ctx = canvasRef.current.getContext('2d');
@@ -121,7 +112,7 @@ export default function JudgeSigns() {
   };
 
   const handleDeleteJudge = async (id) => {
-    if (!window.confirm('Remove this staff/judge signature?')) return;
+    if (!window.confirm('Remove this judge signature?')) return;
     try {
       await deleteDoc(doc(db, 'judge_signatures', id));
       setJudges(judges.filter(j => j.id !== id));
@@ -132,13 +123,13 @@ export default function JudgeSigns() {
 
   return (
     <div>
-      {saving && <LoadingOverlay message="Saving Judge E-Signature..." />}
+      {saving && <LoadingOverlay message="Saving Judge E-Signature Image..." />}
 
       <div className="flex-between" style={{ marginBottom: '2rem' }}>
         <div>
-          <h2>Staff &amp; Judge E-Signatures</h2>
+          <h2>Judge E-Signatures</h2>
           <p style={{ color: 'var(--text-secondary)', marginTop: '0.3rem' }}>
-            Upload or draw staff e-signatures. These signatures will automatically appear at the bottom-right of official PDF reports one by one with 1.5 line spacing.
+            Upload or draw judge signature images. These signature images will automatically be printed at the bottom-right of official PDF reports stacked one by one with 1.5 line space.
           </p>
         </div>
       </div>
@@ -147,33 +138,11 @@ export default function JudgeSigns() {
         {/* Form section */}
         <div className="glass-panel" style={{ padding: '2rem' }}>
           <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <UserCheck size={20} color="var(--accent-primary)" />
-            Add Staff / Judge Signature
+            <PenTool size={20} color="var(--accent-primary)" />
+            Add E-Signature Image
           </h3>
 
           <form onSubmit={handleSaveJudge}>
-            <div style={{ marginBottom: '1.2rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Staff / Judge Full Name</label>
-              <input
-                type="text"
-                placeholder="e.g. Dr. S. MAHESWARAN"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                style={{ width: '100%', padding: '0.8rem', borderRadius: '6px', border: '1px solid var(--glass-border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '1.2rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Designation / Role</label>
-              <input
-                type="text"
-                placeholder="e.g. Staff Coordinator / Judge"
-                value={designation}
-                onChange={(e) => setDesignation(e.target.value)}
-                style={{ width: '100%', padding: '0.8rem', borderRadius: '6px', border: '1px solid var(--glass-border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
-              />
-            </div>
-
             <div style={{ marginBottom: '1.2rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>E-Signature Method</label>
               <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
@@ -203,7 +172,7 @@ export default function JudgeSigns() {
                   <label htmlFor="sign-upload" style={{ cursor: 'pointer', display: 'block' }}>
                     <ImageIcon size={32} style={{ color: 'var(--accent-primary)', marginBottom: '0.5rem' }} />
                     <div style={{ fontWeight: 'bold' }}>Click to select E-Signature image (PNG/JPG)</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.3rem' }}>Transparent PNG recommended</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.3rem' }}>Transparent background recommended</div>
                   </label>
                 </div>
               ) : (
@@ -238,24 +207,24 @@ export default function JudgeSigns() {
 
             <button type="submit" className="success" style={{ width: '100%', padding: '1rem', fontSize: '1rem', fontWeight: 'bold' }}>
               <CheckCircle2 size={18} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-              Save Staff / Judge Signature
+              Upload &amp; Attach Signature Image
             </button>
           </form>
         </div>
 
-        {/* List of saved judges */}
+        {/* List of saved judge images */}
         <div className="glass-panel" style={{ padding: '2rem' }}>
-          <h3 style={{ marginBottom: '1.5rem' }}>Active Staff / Judge Signatures ({judges.length})</h3>
+          <h3 style={{ marginBottom: '1.5rem' }}>Attached Judge Signatures ({judges.length})</h3>
 
           {loading ? (
             <p style={{ color: 'var(--text-secondary)' }}>Loading signatures...</p>
           ) : judges.length === 0 ? (
             <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              No judge signatures added yet. Upload or draw staff signatures on the left.
+              No judge signature images added yet. Upload or draw judge signatures on the left.
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {judges.map((j) => (
+              {judges.map((j, i) => (
                 <div
                   key={j.id}
                   style={{
@@ -268,17 +237,14 @@ export default function JudgeSigns() {
                     justifyContent: 'space-between',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div style={{ background: '#ffffff', padding: '0.4rem 0.8rem', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    <span style={{ fontWeight: 'bold', color: 'var(--text-secondary)' }}>#{i + 1}</span>
+                    <div style={{ background: '#ffffff', padding: '0.5rem 1rem', borderRadius: '6px' }}>
                       <img
                         src={j.signatureBase64}
-                        alt={j.name}
-                        style={{ height: '40px', maxWidth: '120px', objectFit: 'contain' }}
+                        alt={`Judge signature #${i + 1}`}
+                        style={{ height: '45px', maxWidth: '140px', objectFit: 'contain' }}
                       />
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 'bold', fontSize: '1.05rem', color: 'var(--text-primary)' }}>{j.name}</div>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{j.designation}</div>
                     </div>
                   </div>
 

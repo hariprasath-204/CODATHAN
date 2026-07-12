@@ -33,8 +33,34 @@ export default function Results() {
     fetchAndCalculate();
   }, []);
 
-  // Shared institutional header identical to demopdf
-  const drawCollegeHeader = (doc, sheetTitle) => {
+  // Load image from URL to Base64
+  const loadImageAsBase64 = async (url) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.warn('Could not load logo:', url, e);
+      return null;
+    }
+  };
+
+  // Shared institutional header identical to demopdf with left & right logos
+  const drawCollegeHeader = async (doc, sheetTitle) => {
+    const collegeLogo = await loadImageAsBase64('/college_logo.png');
+    const deptLogo = await loadImageAsBase64('/dept_logo.png');
+
+    if (collegeLogo) {
+      try { doc.addImage(collegeLogo, 'PNG', 14, 11, 23, 27); } catch (e) {}
+    }
+    if (deptLogo) {
+      try { doc.addImage(deptLogo, 'PNG', 173, 11, 23, 27); } catch (e) {}
+    }
+
     doc.setTextColor(0, 0, 0);
 
     doc.setFont('helvetica', 'bold');
@@ -90,7 +116,7 @@ export default function Results() {
       console.warn('Could not fetch judge signatures:', err);
     }
 
-    let currentY = (doc.lastAutoTable?.finalY || 180) + 15;
+    let currentY = (doc.lastAutoTable?.finalY || 180) + 12;
 
     if (judges.length === 0) {
       if (currentY > 270) {
@@ -104,35 +130,21 @@ export default function Results() {
       return;
     }
 
-    // Render each staff/judge signature one by one on right side bottom with 1.5 line space
+    // Render each judge signature image one by one on right side bottom with 1.5 line space (image only, no staff name text)
     for (const judge of judges) {
-      if (currentY + 28 > 280) {
+      if (currentY + 22 > 280) {
         doc.addPage();
         currentY = 25;
       }
 
       if (judge.signatureBase64) {
         try {
-          doc.addImage(judge.signatureBase64, 'PNG', 142, currentY, 43, 13);
+          doc.addImage(judge.signatureBase64, 'PNG', 140, currentY, 46, 16);
         } catch (imgErr) {
           console.warn('Signature image embed warning:', imgErr);
         }
       }
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9.5);
-      doc.setTextColor(0, 0, 0);
-      doc.text(`Staff Signature (${judge.name || 'Judge'})`, 185, currentY + 17, { align: 'right' });
-
-      if (judge.designation) {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        doc.setTextColor(80, 80, 80);
-        doc.text(judge.designation, 185, currentY + 21.5, { align: 'right' });
-        currentY += 30; // 1.5 line spacing block advance
-      } else {
-        currentY += 26; // 1.5 line spacing block advance
-      }
+      currentY += 23; // 1.5 line spacing advance after image
     }
   };
 
@@ -143,7 +155,7 @@ export default function Results() {
     await new Promise(r => setTimeout(r, 400));
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const startY = drawCollegeHeader(doc, 'Top 3 Winners (CODATHAN 2K27)');
+    const startY = await drawCollegeHeader(doc, 'Top 3 Winners (CODATHAN 2K27)');
 
     const head = [['Rank', 'Participant Roll / Lot No', 'Participant Name', 'Solved Questions', 'Total Points']];
     const body = winners.map((w, idx) => [
@@ -179,7 +191,7 @@ export default function Results() {
     await new Promise(r => setTimeout(r, 400));
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const startY = drawCollegeHeader(doc, 'CODATHAN 2K27 ScoreSheet');
+    const startY = await drawCollegeHeader(doc, 'CODATHAN 2K27 ScoreSheet');
 
     const head = [['Rank', 'Participant Roll / Lot No', 'Participant Name', 'Solved', 'Submissions', 'Flags', 'Total Points']];
     const body = users.map((u, idx) => [
