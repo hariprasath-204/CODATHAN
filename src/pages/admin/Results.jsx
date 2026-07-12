@@ -55,10 +55,10 @@ export default function Results() {
     const deptLogo = await loadImageAsBase64('/dept_logo.png');
 
     if (collegeLogo) {
-      try { doc.addImage(collegeLogo, 'PNG', 14, 11, 23, 27); } catch (e) {}
+      try { doc.addImage(collegeLogo, 'PNG', 14, 11, 20, 21); } catch (e) {}
     }
     if (deptLogo) {
-      try { doc.addImage(deptLogo, 'PNG', 173, 11, 23, 27); } catch (e) {}
+      try { doc.addImage(deptLogo, 'PNG', 176, 11, 20, 21); } catch (e) {}
     }
 
     doc.setTextColor(0, 0, 0);
@@ -116,7 +116,7 @@ export default function Results() {
       console.warn('Could not fetch judge signatures:', err);
     }
 
-    let currentY = (doc.lastAutoTable?.finalY || 180) + 12;
+    let currentY = (doc.lastAutoTable?.finalY || 180) + 10;
 
     if (judges.length === 0) {
       if (currentY > 270) {
@@ -130,21 +130,21 @@ export default function Results() {
       return;
     }
 
-    // Render each judge signature image one by one on right side bottom with 1.5 line space (image only, no staff name text)
+    // Render each judge signature image one by one on right side bottom with decreased height and compact 1.5 line space
     for (const judge of judges) {
-      if (currentY + 22 > 280) {
+      if (currentY + 15 > 280) {
         doc.addPage();
         currentY = 25;
       }
 
       if (judge.signatureBase64) {
         try {
-          doc.addImage(judge.signatureBase64, 'PNG', 140, currentY, 46, 16);
+          doc.addImage(judge.signatureBase64, 'PNG', 150, currentY, 36, 10);
         } catch (imgErr) {
           console.warn('Signature image embed warning:', imgErr);
         }
       }
-      currentY += 23; // 1.5 line spacing advance after image
+      currentY += 15; // Decreased compact 1.5 line spacing advance after image
     }
   };
 
