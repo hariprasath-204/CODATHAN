@@ -1,17 +1,15 @@
 // ════════════════════════════════════════════════════════════════════════════
-//  CODATHAN — Resilient Multi-Provider Code Execution Engine
+//  CODATHAN — OnlineCompiler.io Code Execution Engine
 //  Designed for 500+ concurrent users
 //
-//  Provider chain (auto-fallback):
-//  1. OnlineCompiler.io (Primary — sandboxed Docker containers via API Key)
-//  2. Piston Public (emkc.org — free fallback)
-//  3. Wandbox (free fallback)
+//  Provider:
+//  1. OnlineCompiler.io (sandboxed Docker containers via API Key)
 //
 //  Features:
 //  ✅ Global concurrency limiter
 //  ✅ 30s response cache (identical code = instant result)
 //  ✅ Exponential backoff retries
-//  ✅ Emergency admin alert via Firestore when all providers fail
+//  ✅ Emergency admin alert via Firestore when compilation fails
 // ════════════════════════════════════════════════════════════════════════════
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
@@ -82,7 +80,7 @@ export const resetCompiler = () => {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//  PROVIDER 1 — OnlineCompiler.io (Primary API for all languages)
+//  PROVIDER — OnlineCompiler.io (Sole execution engine for all languages)
 // ════════════════════════════════════════════════════════════════════════════
 const ONLINE_COMPILER_LANG = {
   "c":      "gcc-15",
@@ -150,75 +148,6 @@ const runOnlineCompiler = async (code, language, stdin) => {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//  PROVIDER 2 — Piston Public (Fallback)
-// ════════════════════════════════════════════════════════════════════════════
-const PISTON_LANG = {
-  "c":      { language: "c",      version: "*" },
-  "c++":    { language: "c++",    version: "*" },
-  "cpp":    { language: "c++",    version: "*" },
-  "java":   { language: "java",   version: "*" },
-  "python": { language: "python", version: "*" },
-};
-
-const runPiston = async (code, language, stdin) => {
-  const lang = PISTON_LANG[language];
-  if (!lang) throw new Error("UNSUPPORTED_LANG");
-
-  const res = await fetch("https://emkc.org/api/v2/piston/execute", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      language: lang.language,
-      version:  lang.version,
-      files:    [{ content: code }],
-      stdin:    stdin || "",
-    }),
-  });
-
-  if (res.status === 429) throw new Error("PISTON_RATE_LIMIT");
-  if (!res.ok)           throw new Error(`Piston HTTP ${res.status}`);
-
-  const data = await res.json();
-  const run  = data.run || {};
-  return {
-    output:   ((run.stdout || "") + (run.stderr || "")).trim(),
-    success:  run.code === 0,
-    provider: "Piston (Public)",
-  };
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-//  PROVIDER 3 — Wandbox Public (Fallback)
-// ════════════════════════════════════════════════════════════════════════════
-const WANDBOX_COMPILER = {
-  "c":      "gcc-head-c",
-  "c++":    "gcc-head",
-  "cpp":    "gcc-head",
-  "java":   "openjdk-jdk-22+36",
-  "python": "cpython-3.14.0",
-};
-
-const runWandbox = async (code, language, stdin) => {
-  const compiler = WANDBOX_COMPILER[language];
-  if (!compiler) throw new Error("UNSUPPORTED_LANG");
-
-  const res = await fetch("https://wandbox.org/api/compile.json", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code, compiler, stdin: stdin || "" }),
-  });
-
-  if (!res.ok) throw new Error(`Wandbox HTTP ${res.status}`);
-
-  const data = await res.json();
-  return {
-    output:   (data.program_output || data.compiler_error || data.compiler_message || "").trim(),
-    success:  data.status === "0",
-    provider: "Wandbox",
-  };
-};
-
-// ════════════════════════════════════════════════════════════════════════════
 //  MAIN EXPORT — executeCode
 // ════════════════════════════════════════════════════════════════════════════
 export const executeCode = async (code, language, stdin = "") => {
@@ -233,41 +162,30 @@ export const executeCode = async (code, language, stdin = "") => {
     return cached;
   }
 
-  // Provider chain: OnlineCompiler.io (Primary) → Piston → Wandbox
-  const providers = [
-    { name: "OnlineCompiler.io", fn: () => runOnlineCompiler(code, language, stdin) },
-    { name: "Piston (Public)",   fn: () => runPiston(code, language, stdin)          },
-    { name: "Wandbox",           fn: () => runWandbox(code, language, stdin)          },
-  ];
-
   await acquireSlot();
 
   try {
-    for (const provider of providers) {
-      try {
-        console.log(`[Compiler] Trying: ${provider.name}`);
-        const result = await withRetry(provider.fn);
-        console.log(`[Compiler] ✅ Success via ${provider.name}`);
-        setCache(cacheKey, result);
-        return result;
-      } catch (err) {
-        if (err.message === "UNSUPPORTED_LANG") {
-          return { output: `Language "${language}" is not supported.`, success: false };
-        }
-        console.warn(`[Compiler] ⚠️ ${provider.name} failed: ${err.message}`);
-      }
+    console.log(`[Compiler] Executing via OnlineCompiler.io (${language})`);
+    const result = await withRetry(() => runOnlineCompiler(code, language, stdin));
+    console.log(`[Compiler] ✅ Success via OnlineCompiler.io`);
+    setCache(cacheKey, result);
+    return result;
+  } catch (err) {
+    if (err.message === "UNSUPPORTED_LANG") {
+      return { output: `Language "${language}" is not supported.`, success: false };
     }
+    console.warn(`[Compiler] ⚠️ OnlineCompiler.io failed: ${err.message}`);
 
     const lotNo = localStorage.getItem('codathan_user') || 'unknown';
     addDoc(collection(db, 'compiler_alerts'), {
       lotNo,
       language,
       timestamp: new Date(),
-      message: 'All compilation providers failed. Students cannot submit code.',
+      message: `Compilation failed: ${err.message}`,
     }).catch(() => {});
 
     return {
-      output:  '⚠️ Compilation service is temporarily down.\nAdmin has been alerted automatically. Please wait a moment.',
+      output:  `⚠️ Compilation error or service unavailable: ${err.message}`,
       success: false,
     };
   } finally {
