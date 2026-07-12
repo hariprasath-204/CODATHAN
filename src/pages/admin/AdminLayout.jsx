@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Trophy, Clock, FileText, Users, Activity, FileDown, Code2, AlertOctagon, X, RefreshCw, MonitorPlay, Settings2, Trash2 } from 'lucide-react';
+import { Trophy, Clock, FileText, Users, Activity, FileDown, Code2, AlertOctagon, X, RefreshCw, MonitorPlay, Settings2, Trash2, PenTool } from 'lucide-react';
 
 export default function AdminLayout() {
   const navigate = useNavigate();
@@ -12,6 +12,7 @@ export default function AdminLayout() {
     { path: 'users', icon: <Users size={20} />, label: 'User Management' },
     { path: 'monitoring', icon: <Activity size={20} />, label: 'Breaking News' },
     { path: 'results',     icon: <FileDown size={20} />,    label: 'Results & PDF' },
+    { path: 'judgesigns',  icon: <PenTool size={20} />,     label: 'Judge E-Sign' },
     { path: 'submissions', icon: <Code2 size={20} />,       label: 'Submissions' },
     { path: 'livecode',    icon: <MonitorPlay size={20} />, label: 'Live Code' },
     { path: 'languages',   icon: <Settings2 size={20} />,   label: 'Language Settings' },

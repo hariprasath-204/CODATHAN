@@ -2,14 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { db } from '../../firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import LoadingOverlay from '../../components/LoadingOverlay';
-import { FileDown } from 'lucide-react';
+import { FileDown, Trophy, FileSpreadsheet } from 'lucide-react';
 
 export default function Results() {
   const [users, setUsers]      = useState([]);
   const [winners, setWinners]  = useState([]);
   const [loading, setLoading]  = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [pdfLoading, setPdfLoading]   = useState(false);
 
   useEffect(() => {
@@ -32,160 +33,212 @@ export default function Results() {
     fetchAndCalculate();
   }, []);
 
-  const handleDownloadConfirm = async () => {
-    setShowConfirm(false);
-    setPdfLoading(true);
-    await new Promise(r => setTimeout(r, 800));
+  // Shared institutional header identical to demopdf
+  const drawCollegeHeader = (doc, sheetTitle) => {
+    doc.setTextColor(0, 0, 0);
 
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-    // ─── Header ───────────────────────────────────────────────────────────────
-    doc.setFillColor(0, 0, 0);
-    doc.rect(0, 0, 210, 30, 'F');
-
-    doc.setTextColor(0, 255, 0);
-    doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.text('CODATHAN 2K27 — FINAL RESULTS', 105, 13, { align: 'center' });
+    doc.setFontSize(13);
+    doc.text('SOFTECH', 105, 14, { align: 'center' });
 
-    doc.setFontSize(10);
-    doc.setTextColor(200, 200, 200);
-    doc.text('Ayya Nadar Janaki Ammal College  |  Dept. of Computer Application', 105, 22, { align: 'center' });
+    doc.setFontSize(10.5);
+    doc.text('DEPARTMENT OF COMPUTER APPLICATIONS', 105, 20, { align: 'center' });
 
-    // ─── Generated timestamp ──────────────────────────────────────────────────
+    doc.setFontSize(12.5);
+    doc.text('AYYA NADAR JANAKI AMMAL COLLEGE', 105, 26, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    doc.text(
+      "(Autonomous, Affiliated to Madurai Kamaraj University, Madurai, Re-accredited (4th Cycle) with 'A+' Grade",
+      105, 31, { align: 'center' }
+    );
+    doc.text(
+      "(CGPA 3.48 out of 4) by NAAC, Recognized as College of Excellence and Mentor Institution by UGC, STAR College by DBT",
+      105, 35, { align: 'center' }
+    );
+    doc.text(
+      "and Ranked 72nd at National Level in NIRF 2025 and DST-FIST (2023) Supported & An ISO 9001:2015 & ISO 21001:2018 Certified Institution)",
+      105, 39, { align: 'center' }
+    );
+
+    doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
-    doc.setTextColor(120, 120, 120);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 37);
+    doc.text('SIVAKASI - 626 124.', 105, 44, { align: 'center' });
 
-    // ─── Winner badges ────────────────────────────────────────────────────────
-    const medals      = ['#1 - GOLD', '#2 - SILVER', '#3 - BRONZE'];
-    const medalColors = [[180, 130, 0], [120, 120, 120], [140, 80, 40]];
+    doc.setDrawColor(120, 120, 120);
+    doc.setLineWidth(0.4);
+    doc.line(14, 47, 196, 47);
 
-    winners.forEach((w, i) => {
-      const x = 14 + i * 62;
-      const y = 42;
-      doc.setFillColor(...medalColors[i]);
-      doc.roundedRect(x, y, 58, 22, 3, 3, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      doc.text(medals[i], x + 29, y + 7, { align: 'center' });
-      doc.setFontSize(11);
-      doc.text(w.id, x + 29, y + 14, { align: 'center' });
-      doc.setFontSize(8);
-      doc.text(`${w.totalPoints || 0} pts`, x + 29, y + 20, { align: 'center' });
-    });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11.5);
+    doc.text('CODATHAN 2K27 Coding Event', 105, 54, { align: 'center' });
 
-    // ─── Full standings table (drawn manually — no plugin needed) ─────────────
-    const cols   = [10, 25, 55, 110, 135, 155, 175]; // x positions
-    const widths = [15, 30, 55,  25,  20,  20,  20]; // col widths
-    const heads  = ['#', 'Lot No', 'Name', 'Points', 'Solved', 'Submits', 'Flags'];
-    const ROW_H  = 8;
-    const PAGE_H = 280;
-    let y = 70;
+    doc.setFontSize(13);
+    doc.text(sheetTitle, 105, 61, { align: 'center' });
 
-    const drawRow = (cells, isHead, isAlt, isFlagged) => {
-      // background
-      if (isHead) {
-        doc.setFillColor(0, 0, 0);
-      } else if (isAlt) {
-        doc.setFillColor(240, 255, 240);
-      } else {
-        doc.setFillColor(255, 255, 255);
-      }
-      doc.rect(10, y, 190, ROW_H, 'F');
+    return 68;
+  };
 
-      // border
-      doc.setDrawColor(180, 180, 180);
-      doc.setLineWidth(0.2);
-      doc.rect(10, y, 190, ROW_H, 'S');
-
-      // text
-      cells.forEach((cell, ci) => {
-        const cellStr = String(cell);
-        if (isHead) {
-          doc.setTextColor(0, 220, 0);
-          doc.setFont('helvetica', 'bold');
-        } else if (ci === 3) {
-          doc.setTextColor(0, 130, 0);
-          doc.setFont('helvetica', 'bold');
-        } else if (ci === 6 && isFlagged) {
-          doc.setTextColor(200, 0, 0);
-          doc.setFont('helvetica', 'bold');
-        } else {
-          doc.setTextColor(30, 30, 30);
-          doc.setFont('helvetica', 'normal');
-        }
-        doc.setFontSize(8);
-        // center numeric cols, left-align text
-        const cx = ci >= 3 ? cols[ci] + widths[ci] / 2 : cols[ci] + 1;
-        const align = ci >= 3 ? 'center' : 'left';
-        doc.text(cellStr, cx, y + 5.5, { align });
-      });
-      y += ROW_H;
-    };
-
-    // header row
-    drawRow(heads, true, false, false);
-
-    // data rows
-    users.forEach((user, idx) => {
-      if (y + ROW_H > PAGE_H) {
-        // add page footer then new page
-        doc.setFontSize(8);
-        doc.setTextColor(150, 150, 150);
-        doc.text(`Page ${doc.internal.getCurrentPageInfo().pageNumber}  —  CODATHAN 2K27`, 105, 290, { align: 'center' });
-        doc.addPage();
-        y = 15;
-        drawRow(heads, true, false, false); // repeat header on new page
-      }
-      drawRow(
-        [idx + 1, user.id, user.name || '-', user.totalPoints || 0,
-         user.completedQuestions || 0, user.totalSubmissions || 0, user.flags || 0],
-        false,
-        idx % 2 === 1,
-        (user.flags || 0) > 0
-      );
-    });
-
-    // ─── Footer on all pages ──────────────────────────────────────────────────
-    const pageCount = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(8);
-      doc.setTextColor(150, 150, 150);
-      doc.text(`Page ${i} of ${pageCount}  —  CODATHAN 2K27`, 105, 290, { align: 'center' });
+  const drawStaffSignatures = async (doc) => {
+    let judges = [];
+    try {
+      const { query, orderBy } = await import('firebase/firestore');
+      const qSnap = await getDocs(query(collection(db, 'judge_signatures'), orderBy('createdAt', 'asc')));
+      judges = qSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (err) {
+      console.warn('Could not fetch judge signatures:', err);
     }
 
-    doc.save(`codathan_2k27_results_${Date.now()}.pdf`);
+    let currentY = (doc.lastAutoTable?.finalY || 180) + 15;
+
+    if (judges.length === 0) {
+      if (currentY > 270) {
+        doc.addPage();
+        currentY = 35;
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Staff Signature', 185, currentY + 15, { align: 'right' });
+      return;
+    }
+
+    // Render each staff/judge signature one by one on right side bottom with 1.5 line space
+    for (const judge of judges) {
+      if (currentY + 28 > 280) {
+        doc.addPage();
+        currentY = 25;
+      }
+
+      if (judge.signatureBase64) {
+        try {
+          doc.addImage(judge.signatureBase64, 'PNG', 142, currentY, 43, 13);
+        } catch (imgErr) {
+          console.warn('Signature image embed warning:', imgErr);
+        }
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`Staff Signature (${judge.name || 'Judge'})`, 185, currentY + 17, { align: 'right' });
+
+      if (judge.designation) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(80, 80, 80);
+        doc.text(judge.designation, 185, currentY + 21.5, { align: 'right' });
+        currentY += 30; // 1.5 line spacing block advance
+      } else {
+        currentY += 26; // 1.5 line spacing block advance
+      }
+    }
+  };
+
+  // 1. Top 3 Winners PDF
+  const generateWinnerSheetPDF = async () => {
+    setShowModal(false);
+    setPdfLoading(true);
+    await new Promise(r => setTimeout(r, 400));
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const startY = drawCollegeHeader(doc, 'Top 3 Winners (CODATHAN 2K27)');
+
+    const head = [['Rank', 'Participant Roll / Lot No', 'Participant Name', 'Solved Questions', 'Total Points']];
+    const body = winners.map((w, idx) => [
+      idx === 0 ? '1 (FIRST)' : idx === 1 ? '2 (SECOND)' : '3 (THIRD)',
+      w.id || '-',
+      w.name || '-',
+      String(w.completedQuestions || 0),
+      String(w.totalPoints || 0),
+    ]);
+
+    autoTable(doc, {
+      startY,
+      head,
+      body,
+      theme: 'grid',
+      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', halign: 'center' },
+      bodyStyles: { textColor: 20, halign: 'center', fontSize: 10 },
+      columnStyles: {
+        2: { halign: 'left' },
+      },
+      margin: { left: 14, right: 14 },
+    });
+
+    await drawStaffSignatures(doc);
+    doc.save(`CODATHAN_2K27_Top3_Winners.pdf`);
+    setPdfLoading(false);
+  };
+
+  // 2. Complete ScoreSheet PDF
+  const generateScoreSheetPDF = async () => {
+    setShowModal(false);
+    setPdfLoading(true);
+    await new Promise(r => setTimeout(r, 400));
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const startY = drawCollegeHeader(doc, 'CODATHAN 2K27 ScoreSheet');
+
+    const head = [['Rank', 'Participant Roll / Lot No', 'Participant Name', 'Solved', 'Submissions', 'Flags', 'Total Points']];
+    const body = users.map((u, idx) => [
+      String(idx + 1),
+      u.id || '-',
+      u.name || '-',
+      String(u.completedQuestions || 0),
+      String(u.totalSubmissions || 0),
+      String(u.flags || 0),
+      String(u.totalPoints || 0),
+    ]);
+
+    autoTable(doc, {
+      startY,
+      head,
+      body,
+      theme: 'grid',
+      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', halign: 'center' },
+      bodyStyles: { textColor: 20, halign: 'center', fontSize: 9 },
+      columnStyles: {
+        2: { halign: 'left' },
+      },
+      margin: { left: 14, right: 14 },
+    });
+
+    await drawStaffSignatures(doc);
+    doc.save(`CODATHAN_2K27_ScoreSheet.pdf`);
     setPdfLoading(false);
   };
 
   return (
     <div>
       {(loading || pdfLoading) && (
-        <LoadingOverlay message={pdfLoading ? 'Generating PDF Report...' : 'Calculating Final Standings...'} />
+        <LoadingOverlay message={pdfLoading ? 'Generating PDF Document...' : 'Calculating Final Standings...'} />
       )}
 
-      {/* PDF Confirmation Popup */}
-      {showConfirm && (
+      {/* PDF Selection Modal */}
+      {showModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-          backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex',
+          backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex',
           justifyContent: 'center', alignItems: 'center', zIndex: 2000,
         }}>
-          <div className="glass-panel" style={{ padding: '2.5rem', textAlign: 'center', minWidth: '360px', border: '1px solid var(--accent-primary)' }}>
+          <div className="glass-panel" style={{ padding: '2.5rem', textAlign: 'center', minWidth: '420px', border: '1px solid var(--accent-primary)' }}>
             <FileDown size={48} style={{ color: 'var(--accent-primary)', marginBottom: '1rem' }} />
-            <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Download PDF Report?</h3>
+            <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Select Official PDF Format</h3>
             <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', fontSize: '0.95rem' }}>
-              This will generate and download the final leaderboard standings as a formatted PDF document.
+              Choose between downloading the Top 3 Winners Sheet or the full Participant ScoreSheet. Both include the official college header and staff signature block.
             </p>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-              <button className="secondary" onClick={() => setShowConfirm(false)}>Cancel</button>
-              <button className="success" onClick={handleDownloadConfirm}>
-                <FileDown size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-                Yes, Download PDF
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <button className="primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.9rem' }} onClick={generateWinnerSheetPDF}>
+                <Trophy size={18} />
+                Download Top 3 Winners Sheet PDF
               </button>
+              <button className="success" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.9rem' }} onClick={generateScoreSheetPDF}>
+                <FileSpreadsheet size={18} />
+                Download Complete ScoreSheet PDF
+              </button>
+              <button className="secondary" style={{ marginTop: '0.5rem' }} onClick={() => setShowModal(false)}>Cancel</button>
             </div>
           </div>
         </div>
@@ -193,10 +246,16 @@ export default function Results() {
 
       <div className="flex-between" style={{ marginBottom: '2rem' }}>
         <h2>Final Results &amp; Winners</h2>
-        <button className="primary" onClick={() => setShowConfirm(true)}>
-          <FileDown size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-          Download PDF Report
-        </button>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button className="primary" onClick={generateWinnerSheetPDF}>
+            <Trophy size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+            Winner Sheet PDF
+          </button>
+          <button className="success" onClick={generateScoreSheetPDF}>
+            <FileSpreadsheet size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+            Full ScoreSheet PDF
+          </button>
+        </div>
       </div>
 
       {/* Top 3 Winners */}
