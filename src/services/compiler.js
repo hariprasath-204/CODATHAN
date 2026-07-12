@@ -141,11 +141,11 @@ const runOnlineCompilerWS = (code, compiler, stdin, apiKey) => new Promise((reso
   });
 });
 
-// 2. REST Execution with CORS proxy fallback
-const runOnlineCompilerREST = async (code, compiler, stdin, cleanKey) => {
+// 2. REST Execution with CORS proxy & direct support
+const runOnlineCompilerREST = async (code, compiler, stdin, apiKey) => {
   const endpoints = [
-    "https://api.onlinecompiler.io/api/run-code-sync/",
     "https://corsproxy.io/?https://api.onlinecompiler.io/api/run-code-sync/",
+    "https://api.onlinecompiler.io/api/run-code-sync/",
   ];
 
   for (const url of endpoints) {
@@ -154,7 +154,7 @@ const runOnlineCompilerREST = async (code, compiler, stdin, cleanKey) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": cleanKey,
+          "Authorization": apiKey,
         },
         body: JSON.stringify({
           compiler,
@@ -191,18 +191,31 @@ const runOnlineCompiler = async (code, language, stdin) => {
   const compiler = ONLINE_COMPILER_LANG[language] || ONLINE_COMPILER_LANG["c++"];
   if (!compiler) throw new Error("UNSUPPORTED_LANG");
 
-  const rawKey = import.meta.env.VITE_ONLINE_COMPILER_API_KEY || "ccb79ad09699924cb025d0ba0b6690ed";
-  const cleanKey = rawKey.replace(/^Bearer\s+/i, "").trim();
+  const keys = [
+    import.meta.env.VITE_ONLINE_COMPILER_API_KEY,
+    "ccb79ad09699924cb025d0ba0b6690ed",
+    "42084204b0195f78ed851ac35c43a059",
+  ].filter(Boolean).map(k => k.replace(/^Bearer\s+/i, "").trim());
 
-  // First try WebSocket (Socket.IO) execution to avoid CORS
-  try {
-    return await runOnlineCompilerWS(code, compiler, stdin, cleanKey);
-  } catch (wsErr) {
-    console.warn("[Compiler] WebSocket execution failed, trying REST fallback:", wsErr.message);
+  const uniqueKeys = [...new Set(keys)];
+
+  for (const cleanKey of uniqueKeys) {
+    // 1. Try CORS proxy / REST API first
+    try {
+      return await runOnlineCompilerREST(code, compiler, stdin, cleanKey);
+    } catch (restErr) {
+      console.warn(`[Compiler] REST failed for key ${cleanKey.slice(0, 8)}... trying WebSocket:`, restErr.message);
+    }
+
+    // 2. Try WebSocket (Socket.IO) execution to avoid CORS
+    try {
+      return await runOnlineCompilerWS(code, compiler, stdin, cleanKey);
+    } catch (wsErr) {
+      console.warn(`[Compiler] WebSocket failed for key ${cleanKey.slice(0, 8)}...:`, wsErr.message);
+    }
   }
 
-  // Fallback to REST API with CORS proxy support
-  return await runOnlineCompilerREST(code, compiler, stdin, cleanKey);
+  throw new Error("OnlineCompiler service unavailable or CORS blocked across all keys.");
 };
 
 // ════════════════════════════════════════════════════════════════════════════
