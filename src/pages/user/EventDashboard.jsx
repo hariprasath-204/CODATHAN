@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
-import { collection, query, getDocs, doc, setDoc, addDoc, updateDoc, increment, onSnapshot, where } from 'firebase/firestore';
+import { collection, query, getDocs, getDoc, doc, setDoc, addDoc, updateDoc, increment, onSnapshot, where } from 'firebase/firestore';
 import Editor from '@monaco-editor/react';
 import { executeCode, resetCompiler } from '../../services/compiler';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -204,7 +204,10 @@ export default function EventDashboard() {
 
   const handleCodeChange = (value) => {
     setCode(value);
-    if (selectedQuestion && value) {
+    if (selectedQuestion && value !== undefined) {
+      localStorage.setItem(`codathan_code_${lotNo}_${selectedQuestion.id}_${language}`, value);
+      localStorage.setItem(`codathan_code_${lotNo}_${selectedQuestion.id}`, value);
+      localStorage.setItem(`codathan_lang_${lotNo}_${selectedQuestion.id}`, language);
       setDoc(doc(db, 'user_code', `${lotNo}_${selectedQuestion.id}`), {
         lotNo,
         questionId: selectedQuestion.id,
@@ -212,6 +215,39 @@ export default function EventDashboard() {
         language,
         timestamp: new Date()
       }, { merge: true });
+    }
+  };
+
+  const handleOpenQuestion = async (q) => {
+    setSelectedQuestion(q);
+    const savedLang = localStorage.getItem(`codathan_lang_${lotNo}_${q.id}`) || q.language || 'c++';
+    setLanguage(savedLang);
+
+    const localCodeSpecific = localStorage.getItem(`codathan_code_${lotNo}_${q.id}_${savedLang}`);
+    const localCodeGeneral = localStorage.getItem(`codathan_code_${lotNo}_${q.id}`);
+    const savedLocalCode = localCodeSpecific || localCodeGeneral;
+
+    if (savedLocalCode) {
+      setCode(savedLocalCode);
+    } else {
+      setCode(STARTER_CODE[savedLang] || STARTER_CODE['c++']);
+    }
+
+    setOutput('');
+    setViewMode('editor');
+
+    // Asynchronously fetch saved code from Firestore in case student worked on another device or cleared cache
+    try {
+      const snap = await getDoc(doc(db, 'user_code', `${lotNo}_${q.id}`));
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data && data.code && !savedLocalCode) {
+          setCode(data.code);
+          if (data.language) setLanguage(data.language);
+        }
+      }
+    } catch (err) {
+      console.error('Error restoring saved question code:', err);
     }
   };
 
@@ -423,13 +459,7 @@ export default function EventDashboard() {
                         </div>
                         <button 
                           className={isPassed ? "success flex-center" : (isLocked ? "secondary flex-center" : "primary flex-center")} 
-                          onClick={() => {
-                            setSelectedQuestion(q);
-                            setCode(STARTER_CODE[q.language] || STARTER_CODE['c++']);
-                            setLanguage(q.language || 'c++');
-                            setOutput('');
-                            setViewMode('editor');
-                          }}
+                          onClick={() => handleOpenQuestion(q)}
                           disabled={isLocked}
                         >
                           {isLocked ? <Lock size={20} style={{ marginRight: '0.5rem' }} /> : (isPassed ? <Check size={20} style={{ marginRight: '0.5rem' }} /> : <Code2 size={20} style={{ marginRight: '0.5rem' }} />)}
@@ -473,7 +503,13 @@ export default function EventDashboard() {
             onChange={(e) => {
               const newLang = e.target.value;
               setLanguage(newLang);
-              setCode(STARTER_CODE[newLang] || '');
+              if (selectedQuestion) {
+                localStorage.setItem(`codathan_lang_${lotNo}_${selectedQuestion.id}`, newLang);
+                const savedLangCode = localStorage.getItem(`codathan_code_${lotNo}_${selectedQuestion.id}_${newLang}`);
+                setCode(savedLangCode || STARTER_CODE[newLang] || '');
+              } else {
+                setCode(STARTER_CODE[newLang] || '');
+              }
             }} 
             style={{ padding: '0.5rem', background: 'var(--bg-secondary)', marginLeft: '1rem' }}
           >

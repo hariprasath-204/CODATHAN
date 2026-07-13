@@ -130,21 +130,26 @@ export default function Results() {
       return;
     }
 
-    // Render each judge signature image one by one on right side bottom with decreased height and compact 1.5 line space
+    // Render each staff/judge signature image one by one on right side bottom with compact 1.5 line space and text label
     for (const judge of judges) {
-      if (currentY + 15 > 280) {
+      if (currentY + 22 > 282) {
         doc.addPage();
         currentY = 25;
       }
 
       if (judge.signatureBase64) {
         try {
-          doc.addImage(judge.signatureBase64, 'PNG', 150, currentY, 36, 10);
+          doc.addImage(judge.signatureBase64, 'PNG', 149, currentY, 36, 11);
         } catch (imgErr) {
           console.warn('Signature image embed warning:', imgErr);
         }
       }
-      currentY += 15; // Decreased compact 1.5 line spacing advance after image
+      currentY += 12; // Position immediately below signature image
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(0, 0, 0);
+      doc.text(judge.name || 'Staff Signature', 185, currentY, { align: 'right' });
+      currentY += 11; // Compact 1.5 line spacing advance before next staff signature
     }
   };
 

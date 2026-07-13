@@ -8,6 +8,7 @@ export default function JudgeSigns() {
   const [judges, setJudges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [previewImage, setPreviewImage] = useState(null);
+  const [staffName, setStaffName] = useState('Staff Signature');
   const [mode, setMode] = useState('upload'); // 'upload' or 'draw'
   const [saving, setSaving] = useState(false);
 
@@ -95,9 +96,11 @@ export default function JudgeSigns() {
     try {
       await addDoc(collection(db, 'judge_signatures'), {
         signatureBase64: previewImage,
+        name: staffName.trim() || 'Staff Signature',
         createdAt: new Date(),
       });
       setPreviewImage(null);
+      setStaffName('Staff Signature');
       if (canvasRef.current) {
         const ctx = canvasRef.current.getContext('2d');
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -143,6 +146,27 @@ export default function JudgeSigns() {
           </h3>
 
           <form onSubmit={handleSaveJudge}>
+            <div style={{ marginBottom: '1.2rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                Staff / Judge Label or Name (printed below sign on PDF)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Staff Signature / Dr. A. Sharma"
+                value={staffName}
+                onChange={(e) => setStaffName(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  background: 'var(--bg-tertiary)',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: '6px',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.95rem'
+                }}
+              />
+            </div>
+
             <div style={{ marginBottom: '1.2rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>E-Signature Method</label>
               <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
@@ -245,6 +269,9 @@ export default function JudgeSigns() {
                         alt={`Judge signature #${i + 1}`}
                         style={{ height: '45px', maxWidth: '140px', objectFit: 'contain' }}
                       />
+                    </div>
+                    <div style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                      {j.name || 'Staff Signature'}
                     </div>
                   </div>
 
