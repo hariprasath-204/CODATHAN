@@ -109,7 +109,7 @@ export default function FinalWinners() {
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'radial-gradient(circle at center, rgba(43, 45, 66, 0.5) 0%, var(--bg-primary) 100%)', zIndex: 0 }}></div>
 
       <div style={{ zIndex: 10, textAlign: 'center', marginTop: '2.5rem', marginBottom: '2.5rem' }}>
-        <h1 className="text-gradient" style={{ fontSize: '3.5rem', letterSpacing: '2px', margin: 0 }}>CODATHAN 2k27</h1>
+        <h1 className="text-gradient" style={{ fontSize: '3.5rem', letterSpacing: '2px', margin: 0 }}>CODATHAN 2K26</h1>
         <h2 style={{ color: 'var(--text-secondary)', fontSize: '1.8rem', marginTop: '0.5rem', marginBottom: '1.5rem' }}>
           {selectedCategory === 'ALL' ? 'Combined Champions' : `${selectedCategory} Sector Champions`}
         </h2>

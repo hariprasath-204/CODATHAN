@@ -16,6 +16,7 @@
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { io } from 'socket.io-client';
+import { runJdoodleJava } from './jdoodlePool';
 
 // ─── Global concurrency limiter ──────────────────────────────────────────────
 const MAX_CONCURRENT = 10;
@@ -236,6 +237,14 @@ export const executeCode = async (code, language, stdin = "") => {
   await acquireSlot();
 
   try {
+    if (language === 'java') {
+      console.log(`[Compiler] Executing Java via JDoodle API key pool`);
+      const result = await runJdoodleJava(code, stdin);
+      console.log(`[Compiler] ✅ Success via JDoodle (Java)`);
+      setCache(cacheKey, result);
+      return result;
+    }
+
     console.log(`[Compiler] Executing via OnlineCompiler.io (${language})`);
     const result = await withRetry(() => runOnlineCompiler(code, language, stdin));
     console.log(`[Compiler] ✅ Success via OnlineCompiler.io`);

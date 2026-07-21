@@ -19,6 +19,7 @@ import JudgeSigns from './pages/admin/JudgeSigns';
 import Submissions from './pages/admin/Submissions';
 import LiveCode from './pages/admin/LiveCode';
 import Languages from './pages/admin/Languages';
+import ApiKeys from './pages/admin/ApiKeys';
 import ResetData from './pages/admin/ResetData';
 import Conclusion from './pages/admin/Conclusion';
 import FinalWinners from './pages/admin/FinalWinners';
@@ -47,6 +48,7 @@ function App() {
           <Route path="submissions" element={<Submissions />} />
           <Route path="livecode" element={<LiveCode />} />
           <Route path="languages" element={<Languages />} />
+          <Route path="apikeys" element={<ApiKeys />} />
           <Route path="conclusion" element={<Conclusion />} />
           <Route path="reset" element={<ResetData />} />
         </Route>

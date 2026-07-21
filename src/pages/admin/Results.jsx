@@ -101,7 +101,7 @@ export default function Results() {
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11.5);
-    doc.text('CODATHAN 2K27 Coding Event', 105, 54, { align: 'center' });
+    doc.text('CODATHAN 2K26 Coding Event', 105, 54, { align: 'center' });
 
     doc.setFontSize(13);
     doc.text(sheetTitle, 105, 61, { align: 'center' });
@@ -192,7 +192,7 @@ export default function Results() {
     });
 
     await drawStaffSignatures(doc);
-    doc.save(`CODATHAN_2K27_${targetCategory}_Top3_Winners.pdf`);
+    doc.save(`CODATHAN_2K26_${targetCategory}_Top3_Winners.pdf`);
     setPdfLoading(false);
   };
 
@@ -204,7 +204,7 @@ export default function Results() {
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const catLabel = targetCategory === 'ALL' ? 'Combined (UG & PG)' : targetCategory === 'UG' ? 'UG Sector' : 'PG Sector';
-    const startY = await drawCollegeHeader(doc, `CODATHAN 2K27 ScoreSheet - ${catLabel}`);
+    const startY = await drawCollegeHeader(doc, `CODATHAN 2K26 ScoreSheet - ${catLabel}`);
 
     const targetUsers = targetCategory === 'ALL' ? users : users.filter(u => (u.category || getStudentCategory(u)) === targetCategory);
 
@@ -234,7 +234,7 @@ export default function Results() {
     });
 
     await drawStaffSignatures(doc);
-    doc.save(`CODATHAN_2K27_${targetCategory}_ScoreSheet.pdf`);
+    doc.save(`CODATHAN_2K26_${targetCategory}_ScoreSheet.pdf`);
     setPdfLoading(false);
   };
 
