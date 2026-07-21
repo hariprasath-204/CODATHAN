@@ -250,6 +250,11 @@ export default function EventDashboard() {
     setOutput('');
     setViewMode('editor');
 
+    const localStartKey = `codathan_start_${lotNo}_${q.id}`;
+    if (!localStorage.getItem(localStartKey)) {
+      localStorage.setItem(localStartKey, Date.now().toString());
+    }
+
     // Asynchronously fetch saved code from Firestore in case student worked on another device or cleared cache
     try {
       const snap = await getDoc(doc(db, 'user_code', `${lotNo}_${q.id}`));
@@ -259,9 +264,24 @@ export default function EventDashboard() {
           setCode(data.code);
           if (data.language) setLanguage(data.language);
         }
+        if (!data.startTime) {
+          const st = new Date(parseInt(localStorage.getItem(localStartKey) || Date.now()));
+          await setDoc(doc(db, 'user_code', `${lotNo}_${q.id}`), {
+            lotNo,
+            questionId: q.id,
+            startTime: st
+          }, { merge: true });
+        }
+      } else {
+        const st = new Date(parseInt(localStorage.getItem(localStartKey) || Date.now()));
+        await setDoc(doc(db, 'user_code', `${lotNo}_${q.id}`), {
+          lotNo,
+          questionId: q.id,
+          startTime: st
+        }, { merge: true });
       }
     } catch (err) {
-      console.error('Error restoring saved question code:', err);
+      console.error('Error restoring saved question code or recording startTime:', err);
     }
   };
 
@@ -310,15 +330,34 @@ export default function EventDashboard() {
     }, { merge: true });
 
     if (result.success && normalizeString(result.output) === normalizeString(selectedQuestion.hiddenOutput)) {
+      const endTimestamp = new Date();
+      let startTimestamp = endTimestamp;
+      try {
+        const snap = await getDoc(doc(db, 'user_code', `${lotNo}_${selectedQuestion.id}`));
+        if (snap.exists() && snap.data().startTime) {
+          const st = snap.data().startTime.toDate ? snap.data().startTime.toDate() : new Date(snap.data().startTime);
+          if (!isNaN(st.getTime())) startTimestamp = st;
+        } else {
+          const localSt = localStorage.getItem(`codathan_start_${lotNo}_${selectedQuestion.id}`);
+          if (localSt) startTimestamp = new Date(parseInt(localSt));
+        }
+      } catch (e) {}
+
+      const durationSeconds = Math.max(1, Math.round((endTimestamp.getTime() - startTimestamp.getTime()) / 1000));
+
       setOutput(`Success! All test cases passed.\n\nExecution Output:\n${result.output}`);
       await setDoc(doc(db, 'user_code', `${lotNo}_${selectedQuestion.id}`), {
         isSubmitted: true,
-        passed: true
+        passed: true,
+        startTime: startTimestamp,
+        endTime: endTimestamp,
+        durationSeconds: durationSeconds
       }, { merge: true });
       
       await setDoc(doc(db, 'users', lotNo), {
         completedQuestions: increment(1),
         totalPoints: increment(selectedQuestion.points),
+        totalTimeSeconds: increment(durationSeconds),
         lastSubmitTime: new Date()
       }, { merge: true });
 

@@ -1,7 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, getDocs, onSnapshot } from 'firebase/firestore';
-import { Code2, ChevronDown, ChevronUp, CheckCircle, User } from 'lucide-react';
+import { Code2, ChevronDown, ChevronUp, CheckCircle, User, Clock } from 'lucide-react';
+
+const formatTime = (ts) => {
+  if (!ts) return 'N/A';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  if (isNaN(d.getTime())) return 'N/A';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+};
+
+const formatDuration = (totalSec) => {
+  if (!totalSec || totalSec <= 0) return 'N/A';
+  const mins = Math.floor(totalSec / 60);
+  const secs = Math.round(totalSec % 60);
+  if (mins === 0) return `${secs}s`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  if (hrs === 0) return `${remMins}m ${secs}s`;
+  return `${hrs}h ${remMins}m ${secs}s`;
+};
 
 export default function Submissions() {
   const [users, setUsers]           = useState([]);
@@ -154,7 +172,7 @@ export default function Submissions() {
                             letterSpacing: 0,
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                             <CheckCircle size={18} style={{ color: 'var(--accent-success)', flexShrink: 0 }} />
                             <span style={{ fontWeight: 600 }}>{q.title}</span>
                             <span style={{
@@ -173,6 +191,20 @@ export default function Submissions() {
                             }}>
                               {submission?.language?.toUpperCase() || 'N/A'}
                             </span>
+                            <span style={{
+                              fontSize: '0.8rem',
+                              color: '#00d2ff',
+                              background: 'rgba(0, 210, 255, 0.1)',
+                              border: '1px solid rgba(0, 210, 255, 0.3)',
+                              padding: '0.2rem 0.6rem',
+                              fontWeight: 'bold',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              <Clock size={13} />
+                              {formatDuration(submission?.durationSeconds)}
+                            </span>
                           </div>
                           {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                         </button>
@@ -180,6 +212,13 @@ export default function Submissions() {
                         {/* Expandable code block */}
                         {isOpen && (
                           <div style={{ padding: '1rem 1.5rem' }}>
+                            {/* Timing Summary Banner */}
+                            <div style={{ display: 'flex', gap: '1.5rem', background: '#0a0a0a', padding: '0.8rem 1.2rem', borderRadius: '6px', border: '1px solid #222', marginBottom: '1rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+                              <div><span style={{ color: 'var(--text-secondary)' }}>START TIME:</span> <strong style={{ color: '#fff', marginLeft: '6px' }}>{formatTime(submission?.startTime)}</strong></div>
+                              <div><span style={{ color: 'var(--text-secondary)' }}>END TIME:</span> <strong style={{ color: '#fff', marginLeft: '6px' }}>{formatTime(submission?.endTime)}</strong></div>
+                              <div><span style={{ color: 'var(--text-secondary)' }}>DURATION:</span> <strong style={{ color: '#00d2ff', marginLeft: '6px' }}>{formatDuration(submission?.durationSeconds)}</strong></div>
+                            </div>
+
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem' }}>
                               <Code2 size={16} style={{ color: 'var(--accent-primary)' }} />
                               <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>

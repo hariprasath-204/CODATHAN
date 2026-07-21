@@ -3,40 +3,29 @@ import { db } from '../../firebase';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { getStudentCategory } from '../../utils/ranking';
+import { Clock } from 'lucide-react';
+
+const formatDuration = (totalSec) => {
+  if (!totalSec || totalSec <= 0) return '0s';
+  const mins = Math.floor(totalSec / 60);
+  const secs = Math.round(totalSec % 60);
+  if (mins === 0) return `${secs}s`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  if (hrs === 0) return `${remMins}m ${secs}s`;
+  return `${hrs}h ${remMins}m ${secs}s`;
+};
 
 export default function Leaderboard() {
   const [users, setUsers] = useState([]);
+  const [userCodes, setUserCodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState('ALL'); // 'ALL', 'UG', 'PG'
 
   useEffect(() => {
     const q = collection(db, 'users');
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeUsers = onSnapshot(q, (snapshot) => {
       let fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // Complex sorting logic:
-      // 1. Flag (disqualified) goes to bottom
-      // 2. Points (descending)
-      // 3. Timer (Last Submit Time) (ascending)
-      // 4. Questions Solved (descending)
-      fetchedUsers.sort((a, b) => {
-        const aFlag = (a.flags || 0) > 0 ? 1 : 0;
-        const bFlag = (b.flags || 0) > 0 ? 1 : 0;
-        if (aFlag !== bFlag) return aFlag - bFlag;
-
-        const aPoints = a.totalPoints || 0;
-        const bPoints = b.totalPoints || 0;
-        if (aPoints !== bPoints) return bPoints - aPoints;
-
-        const aTime = a.lastSubmitTime ? (a.lastSubmitTime.toMillis ? a.lastSubmitTime.toMillis() : a.lastSubmitTime) : Infinity;
-        const bTime = b.lastSubmitTime ? (b.lastSubmitTime.toMillis ? b.lastSubmitTime.toMillis() : b.lastSubmitTime) : Infinity;
-        if (aTime !== bTime) return aTime - bTime;
-
-        const aQs = a.completedQuestions || 0;
-        const bQs = b.completedQuestions || 0;
-        return bQs - aQs;
-      });
-
       setUsers(fetchedUsers);
       setLoading(false);
     }, (error) => {
@@ -44,10 +33,40 @@ export default function Leaderboard() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    const unsubscribeCodes = onSnapshot(collection(db, 'user_code'), (snap) => {
+      setUserCodes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => {
+      unsubscribeUsers();
+      unsubscribeCodes();
+    };
   }, []);
 
-  const filteredUsers = categoryFilter === 'ALL' ? users : users.filter(u => (u.category || getStudentCategory(u)) === categoryFilter);
+  const sortedUsers = [...users].sort((a, b) => {
+    const aFlag = (a.flags || 0) > 0 ? 1 : 0;
+    const bFlag = (b.flags || 0) > 0 ? 1 : 0;
+    if (aFlag !== bFlag) return aFlag - bFlag;
+
+    const aPoints = a.totalPoints || 0;
+    const bPoints = b.totalPoints || 0;
+    if (aPoints !== bPoints) return bPoints - aPoints;
+
+    // Calculate duration tie-breaker (lower duration ranks higher)
+    const aDur = a.totalTimeSeconds || userCodes.filter(uc => uc.lotNo === a.id && uc.passed).reduce((acc, uc) => acc + (uc.durationSeconds || 0), 0);
+    const bDur = b.totalTimeSeconds || userCodes.filter(uc => uc.lotNo === b.id && uc.passed).reduce((acc, uc) => acc + (uc.durationSeconds || 0), 0);
+    if (aDur > 0 && bDur > 0 && aDur !== bDur) return aDur - bDur;
+
+    const aTime = a.lastSubmitTime ? (a.lastSubmitTime.toMillis ? a.lastSubmitTime.toMillis() : a.lastSubmitTime) : Infinity;
+    const bTime = b.lastSubmitTime ? (b.lastSubmitTime.toMillis ? b.lastSubmitTime.toMillis() : b.lastSubmitTime) : Infinity;
+    if (aTime !== bTime) return aTime - bTime;
+
+    const aQs = a.completedQuestions || 0;
+    const bQs = b.completedQuestions || 0;
+    return bQs - aQs;
+  });
+
+  const filteredUsers = categoryFilter === 'ALL' ? sortedUsers : sortedUsers.filter(u => (u.category || getStudentCategory(u)) === categoryFilter);
 
   return (
     <div>
@@ -87,6 +106,7 @@ export default function Leaderboard() {
               <th style={{ padding: '1rem' }}>Category</th>
               <th style={{ padding: '1rem' }}>Total Points</th>
               <th style={{ padding: '1rem' }}>Questions Solved</th>
+              <th style={{ padding: '1rem' }}>Total Time</th>
               <th style={{ padding: '1rem' }}>Last Submit Time</th>
               <th style={{ padding: '1rem' }}>Flags (Cheat)</th>
             </tr>
@@ -94,6 +114,8 @@ export default function Leaderboard() {
           <tbody>
             {filteredUsers.map((user, idx) => {
               const uCat = user.category || getStudentCategory(user);
+              const totalDur = user.totalTimeSeconds || userCodes.filter(uc => uc.lotNo === user.id && uc.passed).reduce((acc, uc) => acc + (uc.durationSeconds || 0), 0);
+
               return (
                 <tr key={user.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                   <td style={{ padding: '1rem', fontWeight: 'bold' }}>{idx + 1}</td>
@@ -114,6 +136,9 @@ export default function Leaderboard() {
                   </td>
                   <td style={{ padding: '1rem', color: 'var(--accent-success)', fontWeight: 'bold' }}>{user.totalPoints || 0}</td>
                   <td style={{ padding: '1rem' }}>{user.completedQuestions || 0}</td>
+                  <td style={{ padding: '1rem', color: '#00d2ff', fontWeight: 'bold', fontFamily: 'var(--font-mono)' }}>
+                    {formatDuration(totalDur)}
+                  </td>
                   <td style={{ padding: '1rem' }}>{user.lastSubmitTime ? new Date(user.lastSubmitTime.toMillis ? user.lastSubmitTime.toMillis() : user.lastSubmitTime).toLocaleTimeString() : 'N/A'}</td>
                   <td style={{ padding: '1rem', color: user.flags > 0 ? 'var(--accent-danger)' : 'inherit' }}>{user.flags > 0 ? `Disqualified (${user.flags})` : 0}</td>
                 </tr>
@@ -121,7 +146,7 @@ export default function Leaderboard() {
             })}
             {filteredUsers.length === 0 && (
               <tr>
-                <td colSpan="8" style={{ padding: '2rem', textAlign: 'center' }}>No users found in {categoryFilter} sector.</td>
+                <td colSpan="9" style={{ padding: '2rem', textAlign: 'center' }}>No users found in {categoryFilter} sector.</td>
               </tr>
             )}
           </tbody>
