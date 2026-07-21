@@ -1,10 +1,10 @@
 import { db } from '../firebase';
 import { collection, getDocs, doc, setDoc, updateDoc, increment } from 'firebase/firestore';
 
-// ── Array of JDoodle API Credentials (Supports 20+ keys for automatic failover) ──
+// ── Array of JDoodle API Credentials (Supports 40+ keys for automatic failover) ──
 // If a key exhausts its daily credit limit (statusCode 429 / Daily limit exceeded / Unauthorized / usedCount >= 22),
 // the compiler loop automatically retries the Java program using the next key in this array / Firestore.
-export const INITIAL_JDOODLE_KEYS = [
+const rawJdoodleKeys = [
   // Existing 7 Keys
   {
     clientId: "4a9a6038b2a7e33b9a6b3739d857f178",
@@ -166,8 +166,73 @@ export const INITIAL_JDOODLE_KEYS = [
   {
     clientId: "5d34444cf02750332fb8326009fce9da",
     clientSecret: "3f173d36e4a3e641a60d9d0bc5279b030b505ecc60270c9a0a0bdfe8e2e2faad"
+  },
+  // Added 14 Additional Keys
+  {
+    clientId: "fb5c4989b0451baaac3e59aa20f8b330",
+    clientSecret: "b54599bce45e688846e2237e1703c1dfc19e532b99c3c79f7e1527802f5fb1f0"
+  },
+  {
+    clientId: "2de3f38f161f67b91581761014a76d51",
+    clientSecret: "54cf5c36b1bc82005c7d903a9dfdb70e0d86c703b1e235d99195c9c93408dda3"
+  },
+  {
+    clientId: "445dce4885b55c9c53ad824eb34f072",
+    clientSecret: "c4949dfd0bbbe7a244a44170c97ee2020ef20efad8637c2cacc5cd8b28653328"
+  },
+  {
+    clientId: "7d99ef220a7c7358708c453055adcd7",
+    clientSecret: "a177c99edaa262e1134f1de072a584916ac9c918719ef14bbe6c379eeb7e5027"
+  },
+  {
+    clientId: "891bfcae6d8de932df276dec52bc02bb",
+    clientSecret: "e3e360e1806e84981e2ce4420dde135ee1cf3ffe3f18e654ca7030e7809cb3ac"
+  },
+  {
+    clientId: "a268b15a0bce4b28ac5504ee28b5b05f",
+    clientSecret: "2018b3e7ca07984c2972793a53b2f9799089d1d6627d110165fc30d859dfb634"
+  },
+  {
+    clientId: "7e2873b4d3d62a2ee1c157005d499f20",
+    clientSecret: "345e8e69735c29f74639da13608e5cc7938c4ea0e4dc88143542d322d7ed236d"
+  },
+  {
+    clientId: "2f58385f281b382312f8903cc73feda5",
+    clientSecret: "164e60d70a54b3534ecb327d65fd7e59141236c6ab2b1459dad56d05067f8036"
+  },
+  {
+    clientId: "ec23a851af56542be63fb60842396f77",
+    clientSecret: "d7449e308e31dcadfa909942d00e0a13e3d31a8c4d2290e2fdff724ad8043193"
+  },
+  {
+    clientId: "3b4f220c7d51369f802dfad01c8b4200",
+    clientSecret: "2df0ff0a4ba0c47462790470a24e09b1d1a99ac3ef0a4abafadaa3686efb7f44"
+  },
+  {
+    clientId: "24214c059b4b26e8e929f3f3243ad0ea",
+    clientSecret: "5e34e0cb13475a0b816f8ae50f63bb5a7d9c6a86292379936654187d292415bd"
+  },
+  {
+    clientId: "807fda80fee2b0fa263cdc59fd5b6d37",
+    clientSecret: "b566668ebb757cb3dc484ab3092cd18425f59f411d1446d33c1b526ce5128611"
+  },
+  {
+    clientId: "1b3c1b8c05356c265e81c4bc2e6bab92",
+    clientSecret: "6c59cd9066e1b9b454789a4676a667ede8a91807253759186224ab0883d290c"
+  },
+  {
+    clientId: "e4077f198b6116c21b1c8578a383447",
+    clientSecret: "8d81b43c32c65199df51d35a9a25ca66b4a5fb0f83eab079044b6576de7cdce4"
   }
 ];
+
+// Deduplicate any identical clientIds
+const seenIds = new Set();
+export const INITIAL_JDOODLE_KEYS = rawJdoodleKeys.filter(k => {
+  if (seenIds.has(k.clientId)) return false;
+  seenIds.add(k.clientId);
+  return true;
+});
 
 const COLLECTION_NAME = 'jdoodle_keys';
 const DAILY_LIMIT = 22;
@@ -200,17 +265,26 @@ export const seedAndFetchKeys = async () => {
     const freshSnap = await getDocs(collection(db, COLLECTION_NAME));
     const allKeys = freshSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     
+    // Remove any potential duplicates in Firestore just in case
+    const uniqueKeysMap = new Map();
+    allKeys.forEach(k => {
+      const keyId = k.clientId || k.id;
+      if (!uniqueKeysMap.has(keyId)) {
+        uniqueKeysMap.set(keyId, k);
+      }
+    });
+    const uniqueKeys = Array.from(uniqueKeysMap.values());
+
     // Sort by status ('active' first) and lowest used count
-    allKeys.sort((a, b) => {
+    uniqueKeys.sort((a, b) => {
       if (a.status === 'active' && b.status !== 'active') return -1;
       if (a.status !== 'active' && b.status === 'active') return 1;
       return (a.usedCount || 0) - (b.usedCount || 0);
     });
 
-    return allKeys;
+    return uniqueKeys;
   } catch (err) {
     console.error("[JDoodle Pool] Error fetching/seeding keys from Firestore, using fallback array:", err);
-    // If offline or Firestore fails, return local array formatted as active keys
     return INITIAL_JDOODLE_KEYS.map((k, idx) => ({
       id: k.clientId,
       clientId: k.clientId,
@@ -259,7 +333,7 @@ export const runJdoodleJava = async (code, stdin = "") => {
         if (res.status === 429) {
           console.warn(`[JDoodle Java] Key ${keyObj.clientId.substring(0, 6)} hit rate limit / 429`);
           await markKeyExhausted(keyObj.clientId);
-          break; // Break inner url loop to try next keyObj
+          break;
         }
 
         if (!res.ok) {
@@ -267,21 +341,19 @@ export const runJdoodleJava = async (code, stdin = "") => {
           if (res.status === 401 || text.includes("Daily limit") || text.includes("limit") || text.includes("Unauthorized")) {
             console.warn(`[JDoodle Java] Key ${keyObj.clientId.substring(0, 6)} exhausted or unauthorized: ${text}`);
             await markKeyExhausted(keyObj.clientId);
-            break; // Break inner loop to try next keyObj
+            break;
           }
-          continue; // Try next proxy endpoint if network error
+          continue;
         }
 
         const data = await res.json();
 
-        // Check JDoodle API response body for errors like "Daily limit reached"
         if (data.error && (data.error.includes("Daily limit") || data.error.includes("limit") || data.statusCode === 429)) {
           console.warn(`[JDoodle Java] Key ${keyObj.clientId.substring(0, 6)} error payload: ${data.error}`);
           await markKeyExhausted(keyObj.clientId);
-          break; // Try next key
+          break;
         }
 
-        // Successfully executed! Increment usedCount in Firestore
         await incrementKeyUsage(keyObj.clientId, (keyObj.usedCount || 0) + 1);
 
         let output = (data.output || "").trim();
