@@ -189,8 +189,11 @@ const runOnlineCompilerREST = async (code, compiler, stdin, apiKey) => {
 };
 
 const runOnlineCompiler = async (code, language, stdin) => {
-  const compiler = ONLINE_COMPILER_LANG[language] || ONLINE_COMPILER_LANG["c++"];
-  if (!compiler) throw new Error("UNSUPPORTED_LANG");
+  const compilerList = language === 'java' 
+    ? ["openjdk-25", "openjdk-21", "openjdk-17"] 
+    : [ONLINE_COMPILER_LANG[language] || ONLINE_COMPILER_LANG["c++"]];
+
+  if (!compilerList[0]) throw new Error("UNSUPPORTED_LANG");
 
   const keys = [
     "42084204b0195f78ed851ac35c43a059",
@@ -200,19 +203,23 @@ const runOnlineCompiler = async (code, language, stdin) => {
 
   const uniqueKeys = [...new Set(keys)];
 
-  for (const cleanKey of uniqueKeys) {
-    // 1. Try WebSocket (Socket.IO) execution FIRST — completely avoids browser CORS & preflight errors
-    try {
-      return await runOnlineCompilerWS(code, compiler, stdin, cleanKey);
-    } catch (wsErr) {
-      // Continue silently to fallback
-    }
+  for (const compiler of compilerList) {
+    for (const cleanKey of uniqueKeys) {
+      // 1. Try WebSocket (Socket.IO) execution FIRST — completely avoids browser CORS & preflight errors
+      try {
+        const res = await runOnlineCompilerWS(code, compiler, stdin, cleanKey);
+        if (res.output && !res.output.includes("Compiler not found")) return res;
+      } catch (wsErr) {
+        // Continue silently to fallback
+      }
 
-    // 2. Try REST API fallback
-    try {
-      return await runOnlineCompilerREST(code, compiler, stdin, cleanKey);
-    } catch (restErr) {
-      // Try next key
+      // 2. Try REST API fallback
+      try {
+        const res = await runOnlineCompilerREST(code, compiler, stdin, cleanKey);
+        if (res.output && !res.output.includes("Compiler not found")) return res;
+      } catch (restErr) {
+        // Try next key
+      }
     }
   }
 

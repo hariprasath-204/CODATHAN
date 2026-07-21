@@ -307,11 +307,19 @@ export const runJdoodleJava = async (code, stdin = "") => {
   }
 
   const endpoints = [
+    "/api/jdoodle",
+    "https://api.codetabs.com/v1/proxy/?quest=https://api.jdoodle.com/v1/execute",
+    "https://thingproxy.freeboard.io/fetch/https://api.jdoodle.com/v1/execute",
+    "https://proxy.cors.sh/https://api.jdoodle.com/v1/execute",
     "https://corsproxy.io/?https://api.jdoodle.com/v1/execute",
     "https://api.jdoodle.com/v1/execute"
   ];
 
+  let consecutiveNetworkFailures = 0;
+
   for (const keyObj of activeKeys) {
+    let keyNetworkFailedOnAll = true;
+
     for (const url of endpoints) {
       try {
         console.log(`[JDoodle Java] Attempting execution with key ${keyObj.clientId.substring(0, 6)}... via ${url}`);
@@ -329,6 +337,9 @@ export const runJdoodleJava = async (code, stdin = "") => {
             stdin: stdin || ""
           })
         });
+
+        keyNetworkFailedOnAll = false;
+        consecutiveNetworkFailures = 0;
 
         if (res.status === 429) {
           console.warn(`[JDoodle Java] Key ${keyObj.clientId.substring(0, 6)} hit rate limit / 429`);
@@ -366,6 +377,14 @@ export const runJdoodleJava = async (code, stdin = "") => {
         };
       } catch (err) {
         console.warn(`[JDoodle Java] Request error with key ${keyObj.clientId.substring(0, 6)} via ${url}:`, err.message);
+      }
+    }
+
+    if (keyNetworkFailedOnAll) {
+      consecutiveNetworkFailures++;
+      if (consecutiveNetworkFailures >= 2) {
+        console.warn("[JDoodle Java] Multiple consecutive keys failed on ALL proxy endpoints due to CORS / network block. Breaking early to trigger fallback...");
+        throw new Error("JDOODLE_NETWORK_CORS_BLOCKED");
       }
     }
   }
