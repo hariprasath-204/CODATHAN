@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, getDocs, onSnapshot } from 'firebase/firestore';
 import { Code2, ChevronDown, ChevronUp, CheckCircle, User, Clock } from 'lucide-react';
+import { getStudentCategory } from '../../utils/ranking';
 
 const formatTime = (ts) => {
   if (!ts) return 'N/A';
@@ -27,6 +28,7 @@ export default function Submissions() {
   const [questions, setQuestions]   = useState([]);
   const [userCodes, setUserCodes]   = useState([]);
   const [selectedRound, setSelectedRound] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('ALL'); // 'ALL', 'UG', 'PG'
   const [expandedKey, setExpandedKey]     = useState(null); // "lotNo_questionId"
   const [loading, setLoading]       = useState(true);
 
@@ -61,6 +63,10 @@ export default function Submissions() {
     ? questions
     : questions.filter(q => q.roundId === selectedRound);
 
+  const filteredUsers = categoryFilter === 'ALL'
+    ? users
+    : users.filter(u => (u.category || getStudentCategory(u)) === categoryFilter);
+
   const toggleExpand = (key) => setExpandedKey(prev => prev === key ? null : key);
 
   if (loading) {
@@ -76,37 +82,65 @@ export default function Submissions() {
   return (
     <div>
       {/* Header */}
-      <div className="flex-between" style={{ marginBottom: '2rem' }}>
-        <h1 className="text-gradient" style={{ margin: 0 }}>User Submissions</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <label style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Filter by Round:</label>
-          <select
-            value={selectedRound}
-            onChange={e => setSelectedRound(e.target.value)}
-            style={{ minWidth: '200px' }}
-          >
-            <option value="all">All Rounds</option>
-            {rounds.map(r => (
-              <option key={r.id} value={r.id}>{r.name}</option>
+      <div className="flex-between" style={{ marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <h1 className="text-gradient" style={{ margin: 0 }}>
+          User Submissions {categoryFilter !== 'ALL' ? `(${categoryFilter} Sector)` : ''}
+        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+          {/* UG / PG Sector Buttons */}
+          <div style={{ display: 'flex', background: 'var(--bg-secondary)', padding: '4px', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+            {['ALL', 'UG', 'PG'].map(cat => (
+              <button
+                key={cat}
+                onClick={() => setCategoryFilter(cat)}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: categoryFilter === cat ? 'var(--accent-primary)' : 'transparent',
+                  color: categoryFilter === cat ? '#000' : 'var(--text-secondary)',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {cat === 'ALL' ? 'All Combined' : `${cat} Sector`}
+              </button>
             ))}
-          </select>
+          </div>
+
+          {/* Round Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+            <label style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Filter by Round:</label>
+            <select
+              value={selectedRound}
+              onChange={e => setSelectedRound(e.target.value)}
+              style={{ minWidth: '180px' }}
+            >
+              <option value="all">All Rounds</option>
+              {rounds.map(r => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Per-user table */}
-      {users.length === 0 && (
+      {filteredUsers.length === 0 && (
         <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          No registered users found.
+          No registered users found in {categoryFilter === 'ALL' ? 'All Combined' : `${categoryFilter} Sector`}.
         </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {users.map(user => {
+        {filteredUsers.map(user => {
           // Questions finished by this user within the current filter
           const userFinished = filteredQuestions.filter(q =>
             userCodes.some(uc => uc.lotNo === user.id && uc.questionId === q.id && uc.passed === true)
           );
           const totalFiltered = filteredQuestions.length;
+          const uCat = user.category || getStudentCategory(user);
 
           return (
             <div key={user.id} className="glass-panel" style={{ padding: '1.5rem' }}>
@@ -115,9 +149,22 @@ export default function Submissions() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <User size={24} style={{ color: 'var(--accent-primary)' }} />
                   <div>
-                    <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>
-                      {user.name || user.id}
-                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
+                      <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>
+                        {user.name || user.id}
+                      </h3>
+                      <span style={{
+                        padding: '0.2rem 0.6rem',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        fontWeight: 'bold',
+                        background: uCat === 'PG' ? 'rgba(255, 0, 255, 0.15)' : 'rgba(0, 245, 155, 0.15)',
+                        color: uCat === 'PG' ? '#ff00ff' : '#00f59b',
+                        border: `1px solid ${uCat === 'PG' ? '#ff00ff' : '#00f59b'}`
+                      }}>
+                        {uCat}
+                      </span>
+                    </div>
                     <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                       Lot No: <strong style={{ color: 'var(--accent-primary)' }}>{user.id}</strong>
                     </span>
