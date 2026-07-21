@@ -275,11 +275,19 @@ export const seedAndFetchKeys = async () => {
     });
     const uniqueKeys = Array.from(uniqueKeysMap.values());
 
-    // Sort by status ('active' first) and lowest used count
+    // Create lookup map of fixed index positions from INITIAL_JDOODLE_KEYS
+    const keyOrderMap = new Map();
+    INITIAL_JDOODLE_KEYS.forEach((k, idx) => {
+      keyOrderMap.set(k.clientId, idx);
+    });
+
+    // Sort by status ('active' first) and then strictly by fixed sequence order (Key #1 -> Key #2 -> Key #3)
     uniqueKeys.sort((a, b) => {
       if (a.status === 'active' && b.status !== 'active') return -1;
       if (a.status !== 'active' && b.status === 'active') return 1;
-      return (a.usedCount || 0) - (b.usedCount || 0);
+      const orderA = keyOrderMap.has(a.clientId) ? keyOrderMap.get(a.clientId) : 999;
+      const orderB = keyOrderMap.has(b.clientId) ? keyOrderMap.get(b.clientId) : 999;
+      return orderA - orderB;
     });
 
     return uniqueKeys;

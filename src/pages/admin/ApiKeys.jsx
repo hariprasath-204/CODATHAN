@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Key, Plus, CheckCircle2, AlertTriangle, XCircle, RefreshCw, Trash2, Power, ShieldCheck, Activity, Terminal } from 'lucide-react';
-import { seedAndFetchKeys } from '../../services/jdoodlePool';
+import { seedAndFetchKeys, INITIAL_JDOODLE_KEYS } from '../../services/jdoodlePool';
 
 export default function ApiKeys() {
   const [keys, setKeys] = useState([]);
@@ -21,10 +21,17 @@ export default function ApiKeys() {
       const unsub = onSnapshot(collection(db, 'jdoodle_keys'), (snapshot) => {
         const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
+        const keyOrderMap = new Map();
+        INITIAL_JDOODLE_KEYS.forEach((k, idx) => {
+          keyOrderMap.set(k.clientId, idx);
+        });
+
         fetched.sort((a, b) => {
           if (a.status === 'active' && b.status !== 'active') return -1;
           if (a.status !== 'active' && b.status === 'active') return 1;
-          return (a.usedCount || 0) - (b.usedCount || 0);
+          const orderA = keyOrderMap.has(a.clientId) ? keyOrderMap.get(a.clientId) : 999;
+          const orderB = keyOrderMap.has(b.clientId) ? keyOrderMap.get(b.clientId) : 999;
+          return orderA - orderB;
         });
 
         setKeys(fetched);
