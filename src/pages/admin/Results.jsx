@@ -4,7 +4,8 @@ import { collection, getDocs } from 'firebase/firestore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import LoadingOverlay from '../../components/LoadingOverlay';
-import { FileDown, Trophy, FileSpreadsheet } from 'lucide-react';
+import { FileDown, Trophy, FileSpreadsheet, Filter } from 'lucide-react';
+import { getStudentCategory } from '../../utils/ranking';
 
 export default function Results() {
   const [users, setUsers]      = useState([]);
@@ -12,6 +13,8 @@ export default function Results() {
   const [loading, setLoading]  = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [pdfLoading, setPdfLoading]   = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState('ALL'); // 'ALL', 'UG', 'PG'
+  const [pdfCategory, setPdfCategory] = useState('UG'); // Default category for PDF modal
 
   useEffect(() => {
     const fetchAndCalculate = async () => {
@@ -130,7 +133,6 @@ export default function Results() {
       return;
     }
 
-    // Render each staff/judge signature image one by one on right side bottom with compact 1.5 line space and text label
     for (const judge of judges) {
       if (currentY + 22 > 282) {
         doc.addPage();
@@ -144,29 +146,34 @@ export default function Results() {
           console.warn('Signature image embed warning:', imgErr);
         }
       }
-      currentY += 12; // Position immediately below signature image
+      currentY += 12;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9.5);
       doc.setTextColor(0, 0, 0);
       doc.text(judge.name || 'Staff Signature', 185, currentY, { align: 'right' });
-      currentY += 11; // Compact 1.5 line spacing advance before next staff signature
+      currentY += 11;
     }
   };
 
-  // 1. Top 3 Winners PDF
-  const generateWinnerSheetPDF = async () => {
+  // 1. Top 3 Winners PDF (Filtered by chosen category)
+  const generateWinnerSheetPDF = async (targetCategory) => {
     setShowModal(false);
     setPdfLoading(true);
     await new Promise(r => setTimeout(r, 400));
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const startY = await drawCollegeHeader(doc, 'Top 3 Winners (CODATHAN 2K27)');
+    const catLabel = targetCategory === 'ALL' ? 'Combined (UG & PG)' : targetCategory === 'UG' ? 'UG Sector' : 'PG Sector';
+    const startY = await drawCollegeHeader(doc, `Top 3 Winners - ${catLabel}`);
 
-    const head = [['Rank', 'Participant Roll / Lot No', 'Participant Name', 'Solved Questions', 'Total Points']];
-    const body = winners.map((w, idx) => [
+    const targetUsers = targetCategory === 'ALL' ? users : users.filter(u => (u.category || getStudentCategory(u)) === targetCategory);
+    const targetWinners = targetUsers.slice(0, 3);
+
+    const head = [['Rank', 'Participant Roll / Lot No', 'Participant Name', 'Category', 'Solved Questions', 'Total Points']];
+    const body = targetWinners.map((w, idx) => [
       idx === 0 ? '1 (FIRST)' : idx === 1 ? '2 (SECOND)' : '3 (THIRD)',
       w.id || '-',
       w.name || '-',
+      w.category || getStudentCategory(w),
       String(w.completedQuestions || 0),
       String(w.totalPoints || 0),
     ]);
@@ -185,24 +192,28 @@ export default function Results() {
     });
 
     await drawStaffSignatures(doc);
-    doc.save(`CODATHAN_2K27_Top3_Winners.pdf`);
+    doc.save(`CODATHAN_2K27_${targetCategory}_Top3_Winners.pdf`);
     setPdfLoading(false);
   };
 
-  // 2. Complete ScoreSheet PDF
-  const generateScoreSheetPDF = async () => {
+  // 2. Complete ScoreSheet PDF (Filtered by chosen category)
+  const generateScoreSheetPDF = async (targetCategory) => {
     setShowModal(false);
     setPdfLoading(true);
     await new Promise(r => setTimeout(r, 400));
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const startY = await drawCollegeHeader(doc, 'CODATHAN 2K27 ScoreSheet');
+    const catLabel = targetCategory === 'ALL' ? 'Combined (UG & PG)' : targetCategory === 'UG' ? 'UG Sector' : 'PG Sector';
+    const startY = await drawCollegeHeader(doc, `CODATHAN 2K27 ScoreSheet - ${catLabel}`);
 
-    const head = [['Rank', 'Participant Roll / Lot No', 'Participant Name', 'Solved', 'Submissions', 'Flags', 'Total Points']];
-    const body = users.map((u, idx) => [
+    const targetUsers = targetCategory === 'ALL' ? users : users.filter(u => (u.category || getStudentCategory(u)) === targetCategory);
+
+    const head = [['Rank', 'Participant Roll / Lot No', 'Participant Name', 'Category', 'Solved', 'Submissions', 'Flags', 'Total Points']];
+    const body = targetUsers.map((u, idx) => [
       String(idx + 1),
       u.id || '-',
       u.name || '-',
+      u.category || getStudentCategory(u),
       String(u.completedQuestions || 0),
       String(u.totalSubmissions || 0),
       String(u.flags || 0),
@@ -223,9 +234,12 @@ export default function Results() {
     });
 
     await drawStaffSignatures(doc);
-    doc.save(`CODATHAN_2K27_ScoreSheet.pdf`);
+    doc.save(`CODATHAN_2K27_${targetCategory}_ScoreSheet.pdf`);
     setPdfLoading(false);
   };
+
+  const filteredUsers = categoryFilter === 'ALL' ? users : users.filter(u => (u.category || getStudentCategory(u)) === categoryFilter);
+  const filteredWinners = filteredUsers.slice(0, 3);
 
   return (
     <div>
@@ -240,20 +254,34 @@ export default function Results() {
           backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex',
           justifyContent: 'center', alignItems: 'center', zIndex: 2000,
         }}>
-          <div className="glass-panel" style={{ padding: '2.5rem', textAlign: 'center', minWidth: '420px', border: '1px solid var(--accent-primary)' }}>
+          <div className="glass-panel" style={{ padding: '2.5rem', textAlign: 'center', minWidth: '450px', border: '1px solid var(--accent-primary)' }}>
             <FileDown size={48} style={{ color: 'var(--accent-primary)', marginBottom: '1rem' }} />
-            <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Select Official PDF Format</h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', fontSize: '0.95rem' }}>
-              Choose between downloading the Top 3 Winners Sheet or the full Participant ScoreSheet. Both include the official college header and staff signature block.
+            <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Select Official PDF Format & Sector</h3>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
+              Choose which category (UG, PG, or Combined) and document type to generate.
             </p>
+
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginBottom: '1.8rem' }}>
+              {['UG', 'PG', 'ALL'].map(cat => (
+                <button
+                  key={cat}
+                  className={pdfCategory === cat ? 'primary' : 'secondary'}
+                  onClick={() => setPdfCategory(cat)}
+                  style={{ padding: '0.5rem 1.5rem', fontWeight: 'bold' }}
+                >
+                  {cat === 'ALL' ? 'Combined (UG & PG)' : `${cat} Sector Only`}
+                </button>
+              ))}
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <button className="primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.9rem' }} onClick={generateWinnerSheetPDF}>
+              <button className="primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.9rem' }} onClick={() => generateWinnerSheetPDF(pdfCategory)}>
                 <Trophy size={18} />
-                Download Top 3 Winners Sheet PDF
+                Download Top 3 Winners Sheet ({pdfCategory})
               </button>
-              <button className="success" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.9rem' }} onClick={generateScoreSheetPDF}>
+              <button className="success" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.9rem' }} onClick={() => generateScoreSheetPDF(pdfCategory)}>
                 <FileSpreadsheet size={18} />
-                Download Complete ScoreSheet PDF
+                Download Complete ScoreSheet ({pdfCategory})
               </button>
               <button className="secondary" style={{ marginTop: '0.5rem' }} onClick={() => setShowModal(false)}>Cancel</button>
             </div>
@@ -261,53 +289,98 @@ export default function Results() {
         </div>
       )}
 
-      <div className="flex-between" style={{ marginBottom: '2rem' }}>
-        <h2>Final Results &amp; Winners</h2>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <button className="primary" onClick={generateWinnerSheetPDF}>
-            <Trophy size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-            Winner Sheet PDF
-          </button>
-          <button className="success" onClick={generateScoreSheetPDF}>
-            <FileSpreadsheet size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-            Full ScoreSheet PDF
+      <div className="flex-between" style={{ marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Final Results &amp; Winners</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>
+            Separate views and downloadable PDF reports for UG vs PG students.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Category Filter Tabs */}
+          <div style={{ display: 'flex', background: 'var(--bg-secondary)', padding: '4px', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+            {['ALL', 'UG', 'PG'].map(cat => (
+              <button
+                key={cat}
+                onClick={() => setCategoryFilter(cat)}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: categoryFilter === cat ? 'var(--accent-primary)' : 'transparent',
+                  color: categoryFilter === cat ? '#000' : 'var(--text-secondary)',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {cat === 'ALL' ? 'All Combined' : `${cat} Sector`}
+              </button>
+            ))}
+          </div>
+
+          <button className="primary" onClick={() => setShowModal(true)}>
+            <FileDown size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+            Export PDF Reports
           </button>
         </div>
       </div>
 
       {/* Top 3 Winners */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}>
-        {winners.map((winner, idx) => (
-          <div key={winner.id} className="glass-panel flex-center" style={{
-            padding: '2rem', flexDirection: 'column', textAlign: 'center',
-            border: idx === 0 ? '2px solid var(--accent-warning)' : '1px solid var(--glass-border)',
-          }}>
-            <h1 style={{ color: idx === 0 ? 'var(--accent-warning)' : idx === 1 ? '#e2e8f0' : '#b45309', fontSize: '3rem', margin: 0 }}>
-              {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
-            </h1>
-            <h3 style={{ margin: '1rem 0 0.5rem', color: 'var(--accent-primary)' }}>{winner.id}</h3>
-            <p style={{ color: 'var(--text-secondary)' }}>{winner.name || '-'}</p>
-            <div style={{ marginTop: '1rem', background: 'var(--bg-tertiary)', padding: '0.5rem 1rem', border: '1px solid var(--glass-border)', fontWeight: 'bold', color: 'var(--accent-primary)' }}>
-              {winner.totalPoints || 0} Points
+      <h3 style={{ marginBottom: '1rem', color: 'var(--accent-primary)' }}>
+        Top 3 Winners ({categoryFilter === 'ALL' ? 'Combined' : `${categoryFilter} Sector`})
+      </h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '2.5rem' }}>
+        {filteredWinners.map((winner, idx) => {
+          const uCat = winner.category || getStudentCategory(winner);
+          return (
+            <div key={winner.id} className="glass-panel flex-center" style={{
+              padding: '2rem', flexDirection: 'column', textAlign: 'center',
+              border: idx === 0 ? '2px solid var(--accent-warning)' : '1px solid var(--glass-border)',
+            }}>
+              <h1 style={{ color: idx === 0 ? 'var(--accent-warning)' : idx === 1 ? '#e2e8f0' : '#b45309', fontSize: '3rem', margin: 0 }}>
+                {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
+              </h1>
+              <span style={{
+                marginTop: '0.5rem',
+                padding: '2px 10px',
+                borderRadius: '12px',
+                fontSize: '0.75rem',
+                fontWeight: 'bold',
+                background: uCat === 'PG' ? 'rgba(255, 0, 255, 0.2)' : 'rgba(0, 245, 155, 0.2)',
+                color: uCat === 'PG' ? '#ff00ff' : '#00f59b',
+                border: `1px solid ${uCat === 'PG' ? '#ff00ff' : '#00f59b'}`
+              }}>
+                {uCat} Student
+              </span>
+              <h3 style={{ margin: '0.8rem 0 0.4rem', color: 'var(--accent-primary)' }}>{winner.id}</h3>
+              <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{winner.name || '-'}</p>
+              <div style={{ marginTop: '1rem', background: 'var(--bg-tertiary)', padding: '0.5rem 1rem', border: '1px solid var(--glass-border)', fontWeight: 'bold', color: 'var(--accent-primary)' }}>
+                {winner.totalPoints || 0} Points
+              </div>
             </div>
-          </div>
-        ))}
-        {winners.length === 0 && !loading && (
+          );
+        })}
+        {filteredWinners.length === 0 && !loading && (
           <div className="glass-panel" style={{ gridColumn: '1 / -1', padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-            No results yet. Event data will appear here once participants complete questions.
+            No results yet for {categoryFilter === 'ALL' ? 'any sector' : `${categoryFilter} sector`}.
           </div>
         )}
       </div>
 
       {/* Full Standings Table */}
-      <h3 style={{ marginBottom: '1rem' }}>Full Standings</h3>
+      <h3 style={{ marginBottom: '1rem' }}>
+        Complete ScoreSheet ({categoryFilter === 'ALL' ? 'Combined' : `${categoryFilter} Sector`})
+      </h3>
       <div className="glass-panel" style={{ overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--glass-border)' }}>
               <th style={{ padding: '1rem' }}>Rank</th>
-              <th style={{ padding: '1rem' }}>Lot No</th>
+              <th style={{ padding: '1rem' }}>Lot / Roll No</th>
               <th style={{ padding: '1rem' }}>Name</th>
+              <th style={{ padding: '1rem' }}>Category</th>
               <th style={{ padding: '1rem' }}>Points</th>
               <th style={{ padding: '1rem' }}>Solved</th>
               <th style={{ padding: '1rem' }}>Submissions</th>
@@ -315,23 +388,39 @@ export default function Results() {
             </tr>
           </thead>
           <tbody>
-            {users.map((user, idx) => (
-              <tr key={user.id} style={{ borderBottom: '1px solid var(--glass-border)', background: idx < 3 ? 'rgba(0,255,0,0.03)' : 'transparent' }}>
-                <td style={{ padding: '1rem', fontWeight: 'bold', color: idx === 0 ? 'var(--accent-warning)' : 'inherit' }}>{idx + 1}</td>
-                <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--accent-primary)' }}>{user.id}</td>
-                <td style={{ padding: '1rem' }}>{user.name || '-'}</td>
-                <td style={{ padding: '1rem', color: 'var(--accent-success)', fontWeight: 'bold' }}>{user.totalPoints || 0}</td>
-                <td style={{ padding: '1rem' }}>{user.completedQuestions || 0}</td>
-                <td style={{ padding: '1rem' }}>{user.totalSubmissions || 0}</td>
-                <td style={{ padding: '1rem', color: user.flags > 0 ? 'var(--accent-danger)' : 'inherit', fontWeight: user.flags > 0 ? 'bold' : 'normal' }}>
-                  {user.flags || 0}
-                </td>
-              </tr>
-            ))}
-            {users.length === 0 && !loading && (
+            {filteredUsers.map((user, idx) => {
+              const uCat = user.category || getStudentCategory(user);
+              return (
+                <tr key={user.id} style={{ borderBottom: '1px solid var(--glass-border)', background: idx < 3 ? 'rgba(0,255,0,0.03)' : 'transparent' }}>
+                  <td style={{ padding: '1rem', fontWeight: 'bold', color: idx === 0 ? 'var(--accent-warning)' : 'inherit' }}>{idx + 1}</td>
+                  <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--accent-primary)', fontFamily: 'var(--font-mono)' }}>{user.id}</td>
+                  <td style={{ padding: '1rem' }}>{user.name || '-'}</td>
+                  <td style={{ padding: '1rem' }}>
+                    <span style={{
+                      padding: '0.2rem 0.6rem',
+                      borderRadius: '12px',
+                      fontSize: '0.85rem',
+                      fontWeight: 'bold',
+                      background: uCat === 'PG' ? 'rgba(255, 0, 255, 0.15)' : 'rgba(0, 245, 155, 0.15)',
+                      color: uCat === 'PG' ? '#ff00ff' : '#00f59b',
+                      border: `1px solid ${uCat === 'PG' ? '#ff00ff' : '#00f59b'}`
+                    }}>
+                      {uCat}
+                    </span>
+                  </td>
+                  <td style={{ padding: '1rem', color: 'var(--accent-success)', fontWeight: 'bold' }}>{user.totalPoints || 0}</td>
+                  <td style={{ padding: '1rem' }}>{user.completedQuestions || 0}</td>
+                  <td style={{ padding: '1rem' }}>{user.totalSubmissions || 0}</td>
+                  <td style={{ padding: '1rem', color: user.flags > 0 ? 'var(--accent-danger)' : 'inherit', fontWeight: user.flags > 0 ? 'bold' : 'normal' }}>
+                    {user.flags || 0}
+                  </td>
+                </tr>
+              );
+            })}
+            {filteredUsers.length === 0 && !loading && (
               <tr>
-                <td colSpan="7" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                  No user data found.
+                <td colSpan="8" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  No user data found in {categoryFilter} sector.
                 </td>
               </tr>
             )}

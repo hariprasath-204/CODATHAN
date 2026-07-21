@@ -10,7 +10,7 @@ export default function Questions() {
   const [editingQuestionId, setEditingQuestionId] = useState(null);
   
   const initialForm = {
-    title: '', description: '', difficulty: 'Easy', points: 10, roundId: '',
+    title: '', description: '', difficulty: 'Easy', points: 10, roundId: '', category: 'BOTH',
     visibleInput: '', visibleOutput: '', hiddenInput: '', hiddenOutput: ''
   };
   const [formData, setFormData] = useState(initialForm);
@@ -60,6 +60,7 @@ export default function Questions() {
     setFormData({
       title: q.title || '', description: q.description || '', difficulty: q.difficulty || 'Easy',
       points: q.points || 10, roundId: q.roundId || (rounds.length > 0 ? rounds[0].id : ''),
+      category: q.category || 'BOTH',
       visibleInput: q.visibleInput || '', visibleOutput: q.visibleOutput || '',
       hiddenInput: q.hiddenInput || '', hiddenOutput: q.hiddenOutput || ''
     });
@@ -115,7 +116,7 @@ export default function Questions() {
               <label>Title</label>
               <input type="text" name="title" value={formData.title} onChange={handleChange} required style={{ width: '100%' }} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
               <div>
                 <label>Round</label>
                 <select name="roundId" value={formData.roundId} onChange={handleChange} style={{ width: '100%' }} required>
@@ -123,6 +124,14 @@ export default function Questions() {
                   {rounds.map(r => (
                     <option key={r.id} value={r.id}>{r.name || 'Round ' + r.id}</option>
                   ))}
+                </select>
+              </div>
+              <div>
+                <label>Target Category</label>
+                <select name="category" value={formData.category} onChange={handleChange} style={{ width: '100%' }}>
+                  <option value="BOTH">BOTH (Universal)</option>
+                  <option value="UG">UG Students Only</option>
+                  <option value="PG">PG Students Only</option>
                 </select>
               </div>
               <div>
@@ -186,7 +195,20 @@ export default function Questions() {
         {questions.map(q => (
           <div key={q.id} className="glass-panel" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h4 style={{ margin: 0 }}>{q.title}</h4>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.3rem' }}>
+                <h4 style={{ margin: 0 }}>{q.title}</h4>
+                <span style={{
+                  padding: '0.15rem 0.6rem',
+                  borderRadius: '10px',
+                  fontSize: '0.75rem',
+                  fontWeight: 'bold',
+                  background: q.category === 'PG' ? 'rgba(255, 0, 255, 0.15)' : q.category === 'UG' ? 'rgba(0, 245, 155, 0.15)' : 'rgba(0, 240, 255, 0.15)',
+                  color: q.category === 'PG' ? '#ff00ff' : q.category === 'UG' ? '#00f59b' : '#00f0ff',
+                  border: `1px solid ${q.category === 'PG' ? '#ff00ff' : q.category === 'UG' ? '#00f59b' : '#00f0ff'}`
+                }}>
+                  {q.category || 'BOTH'}
+                </span>
+              </div>
               <small style={{ color: 'var(--text-secondary)' }}>
                 {rounds.find(r => r.id === q.roundId)?.name || 'Round ' + q.roundId} | {q.difficulty} | {q.points} pts
               </small>

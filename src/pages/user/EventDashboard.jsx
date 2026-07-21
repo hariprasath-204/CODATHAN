@@ -5,12 +5,15 @@ import { collection, query, getDocs, getDoc, doc, setDoc, addDoc, updateDoc, inc
 import Editor from '@monaco-editor/react';
 import { executeCode, resetCompiler } from '../../services/compiler';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Check, AlertTriangle, Monitor, LogOut, Loader2, Code2, ArrowLeft, Clock, Lock } from 'lucide-react';
+import { Play, Check, AlertTriangle, Monitor, LogOut, Loader2, Code2, ArrowLeft, Clock, Lock, UserCheck } from 'lucide-react';
 import LoadingOverlay from '../../components/LoadingOverlay';
+import { syncClock, getNow } from '../../utils/timeSync';
+import { getStudentCategory } from '../../utils/ranking';
 
 export default function EventDashboard() {
   const navigate = useNavigate();
   const [lotNo, setLotNo] = useState('');
+  const [userCategory, setUserCategory] = useState(localStorage.getItem('codathan_user_category') || 'UG');
   
   const [eventData, setEventData] = useState(null);
   const [rounds, setRounds] = useState([]);
@@ -51,15 +54,27 @@ export default function EventDashboard() {
       return;
     }
     setLotNo(userLot);
+    syncClock(true);
+
+    // Listen to user document for any category updates
+    const unsubUser = onSnapshot(doc(db, 'users', userLot), (uSnap) => {
+      if (uSnap.exists()) {
+        const uData = uSnap.data();
+        const cat = uData.category || getStudentCategory(uData);
+        setUserCategory(cat);
+        localStorage.setItem('codathan_user_category', cat);
+      }
+    });
 
     // 1. Listen to Global Event Settings
-    const unsubEvent = onSnapshot(doc(db, 'event_settings', 'main'), (docSnap) => {
+    const unsubEvent = onSnapshot(doc(db, 'event_settings', 'main'), async (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setEventData(data);
         if (data.status === 'finished') {
           navigate('/waiting');
         } else if (data.status === 'active' && data.startTime && data.duration) {
+          await syncClock(true);
           setEndTime(data.startTime.toDate().getTime() + (data.duration * 1000));
         } else {
           setEndTime(null);
@@ -136,6 +151,7 @@ export default function EventDashboard() {
     setTimeout(() => setShowWelcome(false), 3000);
 
     return () => {
+      unsubUser();
       unsubEvent();
       unsubRounds();
       unsubCode();
@@ -154,18 +170,17 @@ export default function EventDashboard() {
     return () => window.removeEventListener('show-cheat-warning', onCheatWarning);
   }, []);
 
-  // Timer interval
+  // Timer interval using synchronized getNow()
   useEffect(() => {
     if (!endTime || eventData?.status !== 'active') return;
     
     const interval = setInterval(() => {
-      const now = Date.now();
+      const now = getNow();
       const diff = endTime - now;
       
       if (diff <= 0) {
         clearInterval(interval);
         setTimeLeftStr('00:00');
-        // Do not navigate, let admin end it globally
         setRoundFinished(true);
       } else {
         const totalSeconds = Math.floor(diff / 1000);
@@ -178,20 +193,19 @@ export default function EventDashboard() {
     return () => clearInterval(interval);
   }, [endTime, eventData, navigate]);
 
-  // Auto-finish Event if all questions across all rounds are done
+  // Filter rounds and questions for this user's category (UG vs PG or BOTH)
+  const filteredRounds = rounds.filter(r => !r.category || r.category === 'BOTH' || r.category === userCategory);
+  const filteredQuestions = questions.filter(q => (!q.category || q.category === 'BOTH' || q.category === userCategory) && filteredRounds.some(r => r.id === q.roundId));
+
+  // Auto-finish Event if all questions across applicable rounds are done
   useEffect(() => {
-    if (questions.length > 0 && rounds.length > 0) {
-      // Only check questions that belong to existing rounds
-      const activeQuestions = questions.filter(q => rounds.some(r => r.id === q.roundId));
-      if (activeQuestions.length > 0) {
-        const allPassed = activeQuestions.every(q => passedQuestionIds.includes(q.id));
-        if (allPassed && !roundFinished) {
-          setRoundFinished(true);
-          // Do not redirect to waiting page here, stay on dashboard and show "Wait for event end"
-        }
+    if (filteredQuestions.length > 0 && filteredRounds.length > 0) {
+      const allPassed = filteredQuestions.every(q => passedQuestionIds.includes(q.id));
+      if (allPassed && !roundFinished) {
+        setRoundFinished(true);
       }
     }
-  }, [questions, rounds, passedQuestionIds, roundFinished, navigate]);
+  }, [filteredQuestions, filteredRounds, passedQuestionIds, roundFinished, navigate]);
 
   const enterFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -322,8 +336,8 @@ export default function EventDashboard() {
   const getRoundStatus = (roundIndex) => {
     if (roundIndex === 0) return 'unlocked';
     for (let i = 0; i < roundIndex; i++) {
-      const prevRound = rounds[i];
-      const prevQ = questions.filter(q => q.roundId === prevRound.id);
+      const prevRound = filteredRounds[i];
+      const prevQ = filteredQuestions.filter(q => q.roundId === prevRound.id);
       if (prevQ.length > 0) {
         const allPrevSolved = prevQ.every(q => passedQuestionIds.includes(q.id));
         if (!allPrevSolved) return 'locked';
@@ -333,8 +347,7 @@ export default function EventDashboard() {
   };
 
   if (roundFinished) {
-    const activeQuestions = questions.filter(q => rounds.some(r => r.id === q.roundId));
-    const allPassed = activeQuestions.length > 0 && activeQuestions.every(q => passedQuestionIds.includes(q.id));
+    const allPassed = filteredQuestions.length > 0 && filteredQuestions.every(q => passedQuestionIds.includes(q.id));
     return (
       <div className="container flex-center" style={{ minHeight: '100vh', background: 'var(--bg-primary)', zIndex: 50, position: 'fixed', inset: 0 }}>
         <div className="glass-panel" style={{ padding: '4rem', textAlign: 'center', border: '1px solid var(--accent-success)' }}>
@@ -416,8 +429,8 @@ export default function EventDashboard() {
   if (viewMode === 'list') {
     return (
       <div className="container" style={{ paddingTop: '2rem', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <div className="flex-between" style={{ marginBottom: '2rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+        <div className="flex-between" style={{ marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', flexWrap: 'wrap' }}>
             <h1 className="text-gradient" style={{ margin: 0 }}>Event Missions</h1>
             {timeLeftStr && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.5rem 1rem', borderRadius: '8px', color: 'var(--accent-danger)', fontWeight: 'bold', fontSize: '1.2rem', border: '1px solid var(--glass-border)' }}>
@@ -426,12 +439,25 @@ export default function EventDashboard() {
               </div>
             )}
           </div>
-          <span style={{ fontWeight: 'bold' }}>Lot: {lotNo}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <span style={{
+              padding: '0.3rem 0.9rem',
+              borderRadius: '16px',
+              fontSize: '0.9rem',
+              fontWeight: 'bold',
+              background: userCategory === 'PG' ? 'rgba(255, 0, 255, 0.2)' : 'rgba(0, 245, 155, 0.2)',
+              color: userCategory === 'PG' ? '#ff00ff' : '#00f59b',
+              border: `1px solid ${userCategory === 'PG' ? '#ff00ff' : '#00f59b'}`
+            }}>
+              {userCategory} Student Sector
+            </span>
+            <span style={{ fontWeight: 'bold', fontSize: '1.05rem' }}>Lot: {lotNo}</span>
+          </div>
         </div>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem', paddingBottom: '4rem' }}>
-          {rounds.map((round, rIdx) => {
-            const roundQuestions = questions.filter(q => q.roundId === round.id);
+          {filteredRounds.map((round, rIdx) => {
+            const roundQuestions = filteredQuestions.filter(q => q.roundId === round.id);
             const status = getRoundStatus(rIdx);
             const isLocked = status === 'locked';
 
@@ -470,16 +496,16 @@ export default function EventDashboard() {
                   })}
                   {roundQuestions.length === 0 && (
                     <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>
-                      <p style={{ color: 'var(--text-secondary)', margin: 0 }}>No questions in this round yet.</p>
+                      <p style={{ color: 'var(--text-secondary)', margin: 0 }}>No questions assigned to {userCategory} Sector in this round yet.</p>
                     </div>
                   )}
                 </div>
               </div>
             )
           })}
-          {rounds.length === 0 && (
+          {filteredRounds.length === 0 && (
             <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
-              <p style={{ color: 'var(--text-secondary)' }}>Event structure is currently being prepared.</p>
+              <p style={{ color: 'var(--text-secondary)' }}>Event structure is currently being prepared for {userCategory} Sector.</p>
             </div>
           )}
         </div>

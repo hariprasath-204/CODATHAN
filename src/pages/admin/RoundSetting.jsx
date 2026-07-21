@@ -1,20 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../../firebase';
-import { collection, addDoc, updateDoc, doc, setDoc, deleteDoc, getDocs, onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, setDoc, deleteDoc, getDocs, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore';
 import LoadingOverlay from '../../components/LoadingOverlay';
+import { syncClock, getNow } from '../../utils/timeSync';
 
 export default function RoundSetting() {
   const [rounds, setRounds] = useState([]);
   const [roundName, setRoundName] = useState('Round 1');
   const [numQuestions, setNumQuestions] = useState(3);
+  const [roundCategory, setRoundCategory] = useState('BOTH');
   const [loading, setLoading] = useState(false);
   const [editingRoundId, setEditingRoundId] = useState(null);
 
   // Global Event State
   const [eventData, setEventData] = useState(null);
   const [eventDurationInput, setEventDurationInput] = useState(120);
+  const [timeLeftStr, setTimeLeftStr] = useState('');
 
   useEffect(() => {
+    syncClock(true);
+
     // Listen to rounds
     const unsubscribeRounds = onSnapshot(collection(db, 'rounds'), (snapshot) => {
       let fetchedRounds = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -43,6 +48,33 @@ export default function RoundSetting() {
     };
   }, []);
 
+  // Live synchronized timer on Admin side
+  useEffect(() => {
+    if (!eventData || eventData.status !== 'active' || !eventData.startTime || !eventData.duration) {
+      setTimeLeftStr('');
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const startTimeMs = eventData.startTime.toDate().getTime();
+      const endTimeMs = startTimeMs + (eventData.duration * 1000);
+      const nowMs = getNow();
+      const diff = endTimeMs - nowMs;
+
+      if (diff <= 0) {
+        clearInterval(interval);
+        setTimeLeftStr('00:00 (EXPIRED)');
+      } else {
+        const totalSeconds = Math.floor(diff / 1000);
+        const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+        const s = (totalSeconds % 60).toString().padStart(2, '0');
+        setTimeLeftStr(`${m}:${s}`);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [eventData]);
+
   const handleSaveEventSettings = async () => {
     setLoading(true);
     await new Promise(r => setTimeout(r, 1000)); // Artificial delay for UI feedback
@@ -63,17 +95,18 @@ export default function RoundSetting() {
   const handleStartEvent = () => {
     setEventConfirmPopup({
       title: 'Start Event',
-      message: 'Are you sure you want to START the event for all users? This will begin the countdown timer.',
+      message: 'Are you sure you want to START the event for all users? This will begin the synchronized countdown timer.',
       btnText: 'Yes, Start Event',
       btnClass: 'success',
       action: async () => {
         setEventConfirmPopup(null);
         setLoading(true);
-        await new Promise(r => setTimeout(r, 1500));
+        await syncClock(true);
+        await new Promise(r => setTimeout(r, 1000));
         await setDoc(doc(db, 'event_settings', 'main'), {
           status: 'active',
           duration: parseInt(eventDurationInput) * 60,
-          startTime: new Date()
+          startTime: serverTimestamp()
         }, { merge: true });
         setLoading(false);
       }
@@ -89,10 +122,10 @@ export default function RoundSetting() {
       action: async () => {
         setEventConfirmPopup(null);
         setLoading(true);
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 1000));
         await setDoc(doc(db, 'event_settings', 'main'), {
           status: 'finished',
-          endTime: new Date()
+          endTime: serverTimestamp()
         }, { merge: true });
         setLoading(false);
       }
@@ -126,14 +159,16 @@ export default function RoundSetting() {
       if (editingRoundId) {
         await updateDoc(doc(db, 'rounds', editingRoundId), {
           name: roundName,
-          numberOfQuestions: parseInt(numQuestions)
+          numberOfQuestions: parseInt(numQuestions),
+          category: roundCategory
         });
         setEditingRoundId(null);
       } else {
         await addDoc(collection(db, 'rounds'), {
           name: roundName,
           numberOfQuestions: parseInt(numQuestions),
-          createdAt: new Date(),
+          category: roundCategory,
+          createdAt: serverTimestamp(),
         });
       }
     } catch (err) {
@@ -142,12 +177,14 @@ export default function RoundSetting() {
     setLoading(false);
     setRoundName('Round ' + (rounds.length + 2));
     setNumQuestions(3);
+    setRoundCategory('BOTH');
   };
 
   const handleEditRound = (round) => {
     setEditingRoundId(round.id);
     setRoundName(round.name || 'Round');
     setNumQuestions(round.numberOfQuestions || 3);
+    setRoundCategory(round.category || 'BOTH');
   };
 
   const [showConfirm, setShowConfirm] = useState(false);
@@ -213,9 +250,16 @@ export default function RoundSetting() {
       <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem', border: eventData?.status === 'active' ? '2px solid var(--accent-success)' : '' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <h3 style={{ margin: 0, color: eventData?.status === 'active' ? 'var(--accent-success)' : 'inherit' }}>
-              Event Status: {(eventData?.status || 'PENDING').toUpperCase()}
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0, color: eventData?.status === 'active' ? 'var(--accent-success)' : 'inherit' }}>
+                Event Status: {(eventData?.status || 'PENDING').toUpperCase()}
+              </h3>
+              {timeLeftStr && (
+                <span style={{ background: 'var(--bg-secondary)', border: '1px solid var(--accent-success)', color: 'var(--accent-success)', padding: '0.4rem 1rem', borderRadius: '8px', fontSize: '1.2rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  ⏱️ Live Timer: {timeLeftStr}
+                </span>
+              )}
+            </div>
             {eventData?.startTime && eventData?.status === 'active' && (
               <p style={{ color: 'var(--text-secondary)', margin: '0.5rem 0 0 0' }}>Started at: {eventData.startTime.toDate().toLocaleTimeString()}</p>
             )}
@@ -264,6 +308,18 @@ export default function RoundSetting() {
             />
           </div>
           <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Target Category</label>
+            <select 
+              value={roundCategory} 
+              onChange={(e) => setRoundCategory(e.target.value)}
+              style={{ padding: '0.7rem', background: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', color: 'white', borderRadius: '4px' }}
+            >
+              <option value="BOTH">BOTH (Universal / All Students)</option>
+              <option value="UG">UG Students Only</option>
+              <option value="PG">PG Students Only</option>
+            </select>
+          </div>
+          <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Number of Questions (Target)</label>
             <input 
               type="number" 
@@ -276,7 +332,7 @@ export default function RoundSetting() {
             {loading ? 'Saving...' : (editingRoundId ? 'Update Round' : 'Add Round')}
           </button>
           {editingRoundId && (
-            <button className="secondary" onClick={() => { setEditingRoundId(null); setRoundName('Round ' + (rounds.length + 1)); setNumQuestions(3); }} style={{ marginTop: '1.5rem' }}>
+            <button className="secondary" onClick={() => { setEditingRoundId(null); setRoundName('Round ' + (rounds.length + 1)); setNumQuestions(3); setRoundCategory('BOTH'); }} style={{ marginTop: '1.5rem' }}>
               Cancel
             </button>
           )}
@@ -289,6 +345,7 @@ export default function RoundSetting() {
             <tr style={{ background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--glass-border)' }}>
               <th style={{ padding: '1rem' }}>Order</th>
               <th style={{ padding: '1rem' }}>Round Name</th>
+              <th style={{ padding: '1rem' }}>Target Category</th>
               <th style={{ padding: '1rem' }}>Questions Target</th>
               <th style={{ padding: '1rem' }}>Actions</th>
             </tr>
@@ -298,6 +355,19 @@ export default function RoundSetting() {
               <tr key={round.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                 <td style={{ padding: '1rem', fontWeight: 'bold' }}>Level {index + 1}</td>
                 <td style={{ padding: '1rem', fontWeight: 'bold' }}>{round.name || round.id}</td>
+                <td style={{ padding: '1rem' }}>
+                  <span style={{
+                    padding: '0.25rem 0.7rem',
+                    borderRadius: '12px',
+                    fontSize: '0.85rem',
+                    fontWeight: 'bold',
+                    background: round.category === 'PG' ? 'rgba(255, 0, 255, 0.15)' : round.category === 'UG' ? 'rgba(0, 245, 155, 0.15)' : 'rgba(0, 240, 255, 0.15)',
+                    color: round.category === 'PG' ? '#ff00ff' : round.category === 'UG' ? '#00f59b' : '#00f0ff',
+                    border: `1px solid ${round.category === 'PG' ? '#ff00ff' : round.category === 'UG' ? '#00f59b' : '#00f0ff'}`
+                  }}>
+                    {round.category || 'BOTH'}
+                  </span>
+                </td>
                 <td style={{ padding: '1rem' }}>{round.numberOfQuestions || '-'}</td>
                 <td style={{ padding: '1rem', display: 'flex', gap: '0.5rem' }}>
                   <button className="secondary" onClick={() => handleEditRound(round)}>Edit</button>
@@ -307,7 +377,7 @@ export default function RoundSetting() {
             ))}
             {rounds.length === 0 && (
               <tr>
-                <td colSpan="4" style={{ padding: '2rem', textAlign: 'center' }}>No rounds added yet.</td>
+                <td colSpan="5" style={{ padding: '2rem', textAlign: 'center' }}>No rounds added yet.</td>
               </tr>
             )}
           </tbody>

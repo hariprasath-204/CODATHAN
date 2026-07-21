@@ -4,15 +4,19 @@ import { collection, getDocs } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Medal } from 'lucide-react';
 import Confetti from 'react-confetti';
-// using custom window size hook/state below
+import { getStudentCategory } from '../../utils/ranking';
 
 export default function FinalWinners() {
+  const [allUsers, setAllUsers] = useState([]);
   const [winners, setWinners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showConfetti, setShowConfetti] = useState(false);
   const [revealStep, setRevealStep] = useState(0); // 0: None, 1: 3rd, 2: 2nd, 3: 1st
+  const [selectedCategory, setSelectedCategory] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('cat') || 'ALL';
+  });
 
-  // fallback for window size if react-use is not installed
   const [windowSize, setWindowSize] = useState({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -54,9 +58,7 @@ export default function FinalWinners() {
           return bQs - aQs;
         });
 
-        // Filter out disqualified and get top 3
-        const top3 = fetchedUsers.filter(u => (u.flags || 0) === 0).slice(0, 3);
-        setWinners(top3);
+        setAllUsers(fetchedUsers);
       } catch (error) {
         console.error("Error fetching winners:", error);
       } finally {
@@ -67,11 +69,22 @@ export default function FinalWinners() {
     fetchWinners();
   }, []);
 
+  useEffect(() => {
+    // Filter out disqualified and get top 3 for the selected category
+    const validUsers = allUsers.filter(u => (u.flags || 0) === 0);
+    const catFiltered = selectedCategory === 'ALL' 
+      ? validUsers 
+      : validUsers.filter(u => (u.category || getStudentCategory(u)) === selectedCategory);
+    
+    setWinners(catFiltered.slice(0, 3));
+    setRevealStep(0);
+    setShowConfetti(false);
+  }, [allUsers, selectedCategory]);
+
   const handleReveal = () => {
     if (revealStep < 3) {
       setRevealStep(prev => prev + 1);
       if (revealStep === 2) {
-        // Trigger confetti when 1st place is revealed
         setTimeout(() => setShowConfetti(true), 500);
       }
     }
@@ -85,7 +98,6 @@ export default function FinalWinners() {
     );
   }
 
-  // Handle case where we have less than 3 valid winners
   const thirdPlace = winners[2];
   const secondPlace = winners[1];
   const firstPlace = winners[0];
@@ -96,9 +108,34 @@ export default function FinalWinners() {
       
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'radial-gradient(circle at center, rgba(43, 45, 66, 0.5) 0%, var(--bg-primary) 100%)', zIndex: 0 }}></div>
 
-      <div style={{ zIndex: 10, textAlign: 'center', marginTop: '4rem', marginBottom: '4rem' }}>
-        <h1 className="text-gradient" style={{ fontSize: '4rem', letterSpacing: '2px' }}>CODATHAN 2k27</h1>
-        <h2 style={{ color: 'var(--text-secondary)', fontSize: '2rem', marginTop: '1rem' }}>Final Champions</h2>
+      <div style={{ zIndex: 10, textAlign: 'center', marginTop: '2.5rem', marginBottom: '2.5rem' }}>
+        <h1 className="text-gradient" style={{ fontSize: '3.5rem', letterSpacing: '2px', margin: 0 }}>CODATHAN 2k27</h1>
+        <h2 style={{ color: 'var(--text-secondary)', fontSize: '1.8rem', marginTop: '0.5rem', marginBottom: '1.5rem' }}>
+          {selectedCategory === 'ALL' ? 'Combined Champions' : `${selectedCategory} Sector Champions`}
+        </h2>
+
+        {/* Sector Tabs */}
+        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: '6px', borderRadius: '30px', border: '1px solid var(--glass-border)', display: 'inline-flex', gap: '8px' }}>
+          {['ALL', 'UG', 'PG'].map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              style={{
+                padding: '8px 24px',
+                borderRadius: '24px',
+                border: 'none',
+                background: selectedCategory === cat ? 'var(--accent-primary)' : 'transparent',
+                color: selectedCategory === cat ? '#000' : 'var(--text-secondary)',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                fontSize: '0.95rem'
+              }}
+            >
+              {cat === 'ALL' ? 'Universal Champions' : `${cat} Sector Podium`}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={{ zIndex: 10, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '2rem', height: '500px', width: '100%', maxWidth: '1000px', paddingBottom: '2rem' }}>
