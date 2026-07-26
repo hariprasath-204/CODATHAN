@@ -4,6 +4,15 @@ import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import Editor from '@monaco-editor/react';
 import { Eye, Code2, User } from 'lucide-react';
 
+const analyzeCode = (code) => {
+  if (!code) return { lines: 0, loops: 0, conditions: 0, prints: 0 };
+  const lines = code.split('\n').length;
+  const loops = (code.match(/\b(for|while)\b\s*\(/g) || []).length;
+  const conditions = (code.match(/\b(if|else if)\b\s*\(/g) || []).length + (code.match(/\belse\b\s*\{?/g) || []).length;
+  const prints = (code.match(/\b(printf|cout|System\.out\.print|print|println)\b/g) || []).length;
+  return { lines, loops, conditions, prints };
+};
+
 export default function LiveCode() {
   const [users,     setUsers]     = useState([]);
   const [allCodes,  setAllCodes]  = useState([]);
@@ -159,6 +168,17 @@ export default function LiveCode() {
                     &nbsp;·&nbsp; Last updated: {selectedCode.timestamp?.toDate().toLocaleTimeString()}
                     {selectedCode.passed && <span style={{ color: 'var(--accent-success)', marginLeft: '0.5rem' }}>✅ Passed</span>}
                   </div>
+                  {(() => {
+                    const metrics = analyzeCode(selectedCode.code);
+                    return (
+                      <div style={{ display: 'flex', gap: '1.5rem', background: 'rgba(0, 245, 155, 0.05)', padding: '0.5rem 1rem', borderRadius: '4px', border: '1px solid rgba(0, 245, 155, 0.2)', marginBottom: '0.8rem', fontSize: '0.8rem', flexWrap: 'wrap' }}>
+                        <div><span style={{ color: 'var(--text-secondary)' }}>LINES:</span> <strong style={{ color: '#00f59b', marginLeft: '6px' }}>{metrics.lines}</strong></div>
+                        <div><span style={{ color: 'var(--text-secondary)' }}>LOOPS:</span> <strong style={{ color: '#00f59b', marginLeft: '6px' }}>{metrics.loops}</strong></div>
+                        <div><span style={{ color: 'var(--text-secondary)' }}>CONDITIONS:</span> <strong style={{ color: '#00f59b', marginLeft: '6px' }}>{metrics.conditions}</strong></div>
+                        <div><span style={{ color: 'var(--text-secondary)' }}>PRINTS:</span> <strong style={{ color: '#00f59b', marginLeft: '6px' }}>{metrics.prints}</strong></div>
+                      </div>
+                    );
+                  })()}
                   <Editor
                     height="calc(100% - 24px)"
                     theme="vs-dark"

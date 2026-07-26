@@ -239,7 +239,7 @@ export default function EventDashboard() {
     if (savedLocalCode) {
       setCode(savedLocalCode);
     } else {
-      setCode(STARTER_CODE[savedLang] || STARTER_CODE['c++']);
+      setCode(q.defaultCode || STARTER_CODE[savedLang] || STARTER_CODE['c++']);
     }
 
     setOutput('');
@@ -591,7 +591,7 @@ export default function EventDashboard() {
               if (selectedQuestion) {
                 localStorage.setItem(`codathan_lang_${lotNo}_${selectedQuestion.id}`, newLang);
                 const savedLangCode = localStorage.getItem(`codathan_code_${lotNo}_${selectedQuestion.id}_${newLang}`);
-                setCode(savedLangCode || STARTER_CODE[newLang] || '');
+                setCode(savedLangCode || selectedQuestion.defaultCode || STARTER_CODE[newLang] || '');
               } else {
                 setCode(STARTER_CODE[newLang] || '');
               }

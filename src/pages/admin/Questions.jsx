@@ -11,7 +11,7 @@ export default function Questions() {
   
   const initialForm = {
     title: '', description: '', difficulty: 'Easy', points: 10, roundId: '', category: 'BOTH',
-    visibleInput: '', visibleOutput: '', hiddenInput: '', hiddenOutput: ''
+    visibleInput: '', visibleOutput: '', hiddenInput: '', hiddenOutput: '', defaultCode: ''
   };
   const [formData, setFormData] = useState(initialForm);
 
@@ -62,7 +62,8 @@ export default function Questions() {
       points: q.points || 10, roundId: q.roundId || (rounds.length > 0 ? rounds[0].id : ''),
       category: q.category || 'BOTH',
       visibleInput: q.visibleInput || '', visibleOutput: q.visibleOutput || '',
-      hiddenInput: q.hiddenInput || '', hiddenOutput: q.hiddenOutput || ''
+      hiddenInput: q.hiddenInput || '', hiddenOutput: q.hiddenOutput || '',
+      defaultCode: q.defaultCode || ''
     });
   };
 
@@ -148,6 +149,11 @@ export default function Questions() {
           <div>
             <label>Description</label>
             <textarea name="description" value={formData.description} onChange={handleChange} required style={{ width: '100%', minHeight: '100px' }}></textarea>
+          </div>
+
+          <div>
+            <label>Default Starter Code (Optional - Replaces standard templates)</label>
+            <textarea name="defaultCode" value={formData.defaultCode} onChange={handleChange} style={{ width: '100%', minHeight: '100px', fontFamily: 'monospace' }} placeholder="Enter boilerplate code here..."></textarea>
           </div>
 
           <div>

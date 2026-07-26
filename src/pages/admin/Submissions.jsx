@@ -11,6 +11,15 @@ const formatTime = (ts) => {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 };
 
+const analyzeCode = (code) => {
+  if (!code) return { lines: 0, loops: 0, conditions: 0, prints: 0 };
+  const lines = code.split('\n').length;
+  const loops = (code.match(/\b(for|while)\b\s*\(/g) || []).length;
+  const conditions = (code.match(/\b(if|else if)\b\s*\(/g) || []).length + (code.match(/\belse\b\s*\{?/g) || []).length;
+  const prints = (code.match(/\b(printf|cout|System\.out\.print|print|println)\b/g) || []).length;
+  return { lines, loops, conditions, prints };
+};
+
 const formatDuration = (totalSec) => {
   if (!totalSec || totalSec <= 0) return 'N/A';
   const mins = Math.floor(totalSec / 60);
@@ -265,6 +274,19 @@ export default function Submissions() {
                               <div><span style={{ color: 'var(--text-secondary)' }}>END TIME:</span> <strong style={{ color: '#fff', marginLeft: '6px' }}>{formatTime(submission?.endTime)}</strong></div>
                               <div><span style={{ color: 'var(--text-secondary)' }}>DURATION:</span> <strong style={{ color: '#00d2ff', marginLeft: '6px' }}>{formatDuration(submission?.durationSeconds)}</strong></div>
                             </div>
+
+                            {/* Code Metrics Banner */}
+                            {submission?.code && (() => {
+                               const metrics = analyzeCode(submission.code);
+                               return (
+                                 <div style={{ display: 'flex', gap: '1.5rem', background: 'rgba(0, 245, 155, 0.05)', padding: '0.8rem 1.2rem', borderRadius: '6px', border: '1px solid rgba(0, 245, 155, 0.2)', marginBottom: '1rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+                                   <div><span style={{ color: 'var(--text-secondary)' }}>LINES:</span> <strong style={{ color: '#00f59b', marginLeft: '6px' }}>{metrics.lines}</strong></div>
+                                   <div><span style={{ color: 'var(--text-secondary)' }}>LOOPS (for/while):</span> <strong style={{ color: '#00f59b', marginLeft: '6px' }}>{metrics.loops}</strong></div>
+                                   <div><span style={{ color: 'var(--text-secondary)' }}>IF/ELSE CONDITIONS:</span> <strong style={{ color: '#00f59b', marginLeft: '6px' }}>{metrics.conditions}</strong></div>
+                                   <div><span style={{ color: 'var(--text-secondary)' }}>PRINT STATEMENTS:</span> <strong style={{ color: '#00f59b', marginLeft: '6px' }}>{metrics.prints}</strong></div>
+                                 </div>
+                               );
+                            })()}
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem' }}>
                               <Code2 size={16} style={{ color: 'var(--accent-primary)' }} />
