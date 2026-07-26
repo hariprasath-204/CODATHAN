@@ -11,7 +11,8 @@ export default function Questions() {
   
   const initialForm = {
     title: '', description: '', difficulty: 'Easy', points: 10, roundId: '', category: 'BOTH',
-    visibleInput: '', visibleOutput: '', hiddenInput: '', hiddenOutput: '', defaultCode: ''
+    visibleInput: '', visibleOutput: '', hiddenInput: '', hiddenOutput: '', 
+    defaultCodeC: '', defaultCodeCpp: '', defaultCodeJava: '', defaultCodePython: ''
   };
   const [formData, setFormData] = useState(initialForm);
 
@@ -63,7 +64,8 @@ export default function Questions() {
       category: q.category || 'BOTH',
       visibleInput: q.visibleInput || '', visibleOutput: q.visibleOutput || '',
       hiddenInput: q.hiddenInput || '', hiddenOutput: q.hiddenOutput || '',
-      defaultCode: q.defaultCode || ''
+      defaultCodeC: q.defaultCodeC || '', defaultCodeCpp: q.defaultCodeCpp || '',
+      defaultCodeJava: q.defaultCodeJava || '', defaultCodePython: q.defaultCodePython || ''
     });
   };
 
@@ -151,9 +153,25 @@ export default function Questions() {
             <textarea name="description" value={formData.description} onChange={handleChange} required style={{ width: '100%', minHeight: '100px' }}></textarea>
           </div>
 
-          <div>
-            <label>Default Starter Code (Optional - Replaces standard templates)</label>
-            <textarea name="defaultCode" value={formData.defaultCode} onChange={handleChange} style={{ width: '100%', minHeight: '100px', fontFamily: 'monospace' }} placeholder="Enter boilerplate code here..."></textarea>
+          <div className="grid-cols-2">
+            <div>
+              <label>Default C Starter Code</label>
+              <textarea name="defaultCodeC" value={formData.defaultCodeC} onChange={handleChange} style={{ width: '100%', minHeight: '80px', fontFamily: 'monospace' }} placeholder="Optional C Boilerplate..."></textarea>
+            </div>
+            <div>
+              <label>Default C++ Starter Code</label>
+              <textarea name="defaultCodeCpp" value={formData.defaultCodeCpp} onChange={handleChange} style={{ width: '100%', minHeight: '80px', fontFamily: 'monospace' }} placeholder="Optional C++ Boilerplate..."></textarea>
+            </div>
+          </div>
+          <div className="grid-cols-2">
+            <div>
+              <label>Default Java Starter Code</label>
+              <textarea name="defaultCodeJava" value={formData.defaultCodeJava} onChange={handleChange} style={{ width: '100%', minHeight: '80px', fontFamily: 'monospace' }} placeholder="Optional Java Boilerplate..."></textarea>
+            </div>
+            <div>
+              <label>Default Python Starter Code</label>
+              <textarea name="defaultCodePython" value={formData.defaultCodePython} onChange={handleChange} style={{ width: '100%', minHeight: '80px', fontFamily: 'monospace' }} placeholder="Optional Python Boilerplate..."></textarea>
+            </div>
           </div>
 
           <div>

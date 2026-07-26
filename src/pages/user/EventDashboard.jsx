@@ -236,10 +236,21 @@ export default function EventDashboard() {
     const localCodeGeneral = localStorage.getItem(`codathan_code_${lotNo}_${q.id}`);
     const savedLocalCode = localCodeSpecific || localCodeGeneral;
 
+    const getQuestionDefaultCode = (q, lang) => {
+      if (!q) return null;
+      switch (lang) {
+        case 'c': return q.defaultCodeC;
+        case 'c++': case 'cpp': return q.defaultCodeCpp;
+        case 'java': return q.defaultCodeJava;
+        case 'python': return q.defaultCodePython;
+        default: return null;
+      }
+    };
+
     if (savedLocalCode) {
       setCode(savedLocalCode);
     } else {
-      setCode(q.defaultCode || STARTER_CODE[savedLang] || STARTER_CODE['c++']);
+      setCode(getQuestionDefaultCode(q, savedLang) || STARTER_CODE[savedLang] || STARTER_CODE['c++']);
     }
 
     setOutput('');
@@ -588,10 +599,22 @@ export default function EventDashboard() {
             onChange={(e) => {
               const newLang = e.target.value;
               setLanguage(newLang);
+              
+              const getQuestionDefaultCode = (q, lang) => {
+                if (!q) return null;
+                switch (lang) {
+                  case 'c': return q.defaultCodeC;
+                  case 'c++': case 'cpp': return q.defaultCodeCpp;
+                  case 'java': return q.defaultCodeJava;
+                  case 'python': return q.defaultCodePython;
+                  default: return null;
+                }
+              };
+
               if (selectedQuestion) {
                 localStorage.setItem(`codathan_lang_${lotNo}_${selectedQuestion.id}`, newLang);
                 const savedLangCode = localStorage.getItem(`codathan_code_${lotNo}_${selectedQuestion.id}_${newLang}`);
-                setCode(savedLangCode || selectedQuestion.defaultCode || STARTER_CODE[newLang] || '');
+                setCode(savedLangCode || getQuestionDefaultCode(selectedQuestion, newLang) || STARTER_CODE[newLang] || '');
               } else {
                 setCode(STARTER_CODE[newLang] || '');
               }

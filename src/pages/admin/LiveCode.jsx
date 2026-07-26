@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { db } from '../../firebase';
+import { db, dbUG, dbPG } from '../../firebase';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import Editor from '@monaco-editor/react';
 import { Eye, Code2, User } from 'lucide-react';
@@ -27,12 +27,21 @@ export default function LiveCode() {
     return () => unsub();
   }, []);
 
-  // Load all live code (real-time)
+  // Load all live code (real-time) from UG and PG databases
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'user_code'), snap =>
-      setAllCodes(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-    return () => unsub();
+    const unsubUG = onSnapshot(collection(dbUG, 'user_code'), snap => {
+      setAllCodes(prev => {
+        const others = prev.filter(c => c.fromDB !== 'UG');
+        return [...others, ...snap.docs.map(d => ({ id: d.id, fromDB: 'UG', ...d.data() }))];
+      });
+    });
+    const unsubPG = onSnapshot(collection(dbPG, 'user_code'), snap => {
+      setAllCodes(prev => {
+        const others = prev.filter(c => c.fromDB !== 'PG');
+        return [...others, ...snap.docs.map(d => ({ id: d.id, fromDB: 'PG', ...d.data() }))];
+      });
+    });
+    return () => { unsubUG(); unsubPG(); };
   }, []);
 
   // Filter codes for selected user

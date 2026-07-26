@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { db } from '../../firebase';
+import { db, dbUG, dbPG } from '../../firebase';
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { Trash2, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 
@@ -23,9 +23,17 @@ export default function ResetData() {
         const snap = await getDocs(collection(db, collName));
         totalDocs += snap.size;
         snap.forEach(d => {
-          allDocs.push({ collName, id: d.id });
+          allDocs.push({ dbInstance: db, collName, id: d.id });
         });
       }
+
+      const snapUG = await getDocs(collection(dbUG, 'user_code'));
+      totalDocs += snapUG.size;
+      snapUG.forEach(d => allDocs.push({ dbInstance: dbUG, collName: 'user_code', id: d.id }));
+
+      const snapPG = await getDocs(collection(dbPG, 'user_code'));
+      totalDocs += snapPG.size;
+      snapPG.forEach(d => allDocs.push({ dbInstance: dbPG, collName: 'user_code', id: d.id }));
 
       setProgress({ current: 0, total: totalDocs });
 
@@ -38,7 +46,7 @@ export default function ResetData() {
 
       // Second pass: delete them
       for (const item of allDocs) {
-        await deleteDoc(doc(db, item.collName, item.id));
+        await deleteDoc(doc(item.dbInstance, item.collName, item.id));
         deletedDocs++;
         setProgress({ current: deletedDocs, total: totalDocs });
       }

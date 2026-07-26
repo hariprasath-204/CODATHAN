@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
+import { db, dbUG, dbPG } from '../../firebase';
 import { collection, getDocs, onSnapshot } from 'firebase/firestore';
 import { Code2, ChevronDown, ChevronUp, CheckCircle, User, Clock } from 'lucide-react';
 import { getStudentCategory } from '../../utils/ranking';
@@ -60,11 +60,20 @@ export default function Submissions() {
     };
     load();
 
-    // Live-listen to all user_code submissions
-    const unsub = onSnapshot(collection(db, 'user_code'), (snap) => {
-      setUserCodes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    // Live-listen to all user_code submissions from UG and PG databases
+    const unsubUG = onSnapshot(collection(dbUG, 'user_code'), (snap) => {
+      setUserCodes(prev => {
+        const others = prev.filter(c => c.fromDB !== 'UG');
+        return [...others, ...snap.docs.map(d => ({ id: d.id, fromDB: 'UG', ...d.data() }))];
+      });
     });
-    return () => unsub();
+    const unsubPG = onSnapshot(collection(dbPG, 'user_code'), (snap) => {
+      setUserCodes(prev => {
+        const others = prev.filter(c => c.fromDB !== 'PG');
+        return [...others, ...snap.docs.map(d => ({ id: d.id, fromDB: 'PG', ...d.data() }))];
+      });
+    });
+    return () => { unsubUG(); unsubPG(); };
   }, []);
 
   // Questions to show based on round filter

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { db } from '../../firebase';
+import { db, dbUG, dbPG } from '../../firebase';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { getStudentCategory } from '../../utils/ranking';
@@ -33,13 +33,24 @@ export default function Leaderboard() {
       setLoading(false);
     });
 
-    const unsubscribeCodes = onSnapshot(collection(db, 'user_code'), (snap) => {
-      setUserCodes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const unsubscribeCodesUG = onSnapshot(collection(dbUG, 'user_code'), (snap) => {
+      setUserCodes(prev => {
+        const others = prev.filter(c => c.fromDB !== 'UG');
+        return [...others, ...snap.docs.map(d => ({ id: d.id, fromDB: 'UG', ...d.data() }))];
+      });
+    });
+    
+    const unsubscribeCodesPG = onSnapshot(collection(dbPG, 'user_code'), (snap) => {
+      setUserCodes(prev => {
+        const others = prev.filter(c => c.fromDB !== 'PG');
+        return [...others, ...snap.docs.map(d => ({ id: d.id, fromDB: 'PG', ...d.data() }))];
+      });
     });
 
     return () => {
       unsubscribeUsers();
-      unsubscribeCodes();
+      unsubscribeCodesUG();
+      unsubscribeCodesPG();
     };
   }, []);
 
