@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { db } from '../../firebase';
+import { db, dbUG, dbPG } from '../../firebase';
 import { collection, query, getDocs, getDoc, doc, setDoc, addDoc, updateDoc, increment, onSnapshot, where } from 'firebase/firestore';
 import Editor from '@monaco-editor/react';
 import { executeCode, resetCompiler } from '../../services/compiler';
@@ -100,7 +100,8 @@ export default function EventDashboard() {
     fetchQuestions();
 
     // 4. Listen to User's Passed Code
-    const qCode = query(collection(db, 'user_code'), where('lotNo', '==', userLot), where('passed', '==', true));
+    const studentDb = userCategory === 'PG' ? dbPG : dbUG;
+    const qCode = query(collection(studentDb, 'user_code'), where('lotNo', '==', userLot), where('passed', '==', true));
     const unsubCode = onSnapshot(qCode, (snapshot) => {
       setPassedQuestionIds(snapshot.docs.map(doc => doc.data().questionId));
     });
@@ -222,13 +223,7 @@ export default function EventDashboard() {
       localStorage.setItem(`codathan_code_${lotNo}_${selectedQuestion.id}_${language}`, value);
       localStorage.setItem(`codathan_code_${lotNo}_${selectedQuestion.id}`, value);
       localStorage.setItem(`codathan_lang_${lotNo}_${selectedQuestion.id}`, language);
-      setDoc(doc(db, 'user_code', `${lotNo}_${selectedQuestion.id}`), {
-        lotNo,
-        questionId: selectedQuestion.id,
-        code: value,
-        language,
-        timestamp: new Date()
-      }, { merge: true });
+      // Write to Firestore removed to prevent hitting 20k limit on every keystroke
     }
   };
 
@@ -257,7 +252,8 @@ export default function EventDashboard() {
 
     // Asynchronously fetch saved code from Firestore in case student worked on another device or cleared cache
     try {
-      const snap = await getDoc(doc(db, 'user_code', `${lotNo}_${q.id}`));
+      const studentDb = userCategory === 'PG' ? dbPG : dbUG;
+      const snap = await getDoc(doc(studentDb, 'user_code', `${lotNo}_${q.id}`));
       if (snap.exists()) {
         const data = snap.data();
         if (data && data.code && !savedLocalCode) {
@@ -266,7 +262,7 @@ export default function EventDashboard() {
         }
         if (!data.startTime) {
           const st = new Date(parseInt(localStorage.getItem(localStartKey) || Date.now()));
-          await setDoc(doc(db, 'user_code', `${lotNo}_${q.id}`), {
+          await setDoc(doc(studentDb, 'user_code', `${lotNo}_${q.id}`), {
             lotNo,
             questionId: q.id,
             startTime: st
@@ -274,7 +270,7 @@ export default function EventDashboard() {
         }
       } else {
         const st = new Date(parseInt(localStorage.getItem(localStartKey) || Date.now()));
-        await setDoc(doc(db, 'user_code', `${lotNo}_${q.id}`), {
+        await setDoc(doc(studentDb, 'user_code', `${lotNo}_${q.id}`), {
           lotNo,
           questionId: q.id,
           startTime: st
@@ -299,6 +295,17 @@ export default function EventDashboard() {
       return;
     }
     lastRunRef.current = now;
+
+    // Save code explicitly on run
+    const studentDb = userCategory === 'PG' ? dbPG : dbUG;
+    await setDoc(doc(studentDb, 'user_code', `${lotNo}_${selectedQuestion.id}`), {
+      lotNo,
+      questionId: selectedQuestion.id,
+      code,
+      language,
+      timestamp: new Date()
+    }, { merge: true });
+
     setIsCompiling(true);
     setLoadingOverlayMsg('Compiling Code...');
     await new Promise(r => setTimeout(r, 500));
@@ -317,6 +324,17 @@ export default function EventDashboard() {
 
   const handleSubmit = async () => {
     if (!selectedQuestion) return;
+    
+    // Save code explicitly on submit
+    const studentDb = userCategory === 'PG' ? dbPG : dbUG;
+    await setDoc(doc(studentDb, 'user_code', `${lotNo}_${selectedQuestion.id}`), {
+      lotNo,
+      questionId: selectedQuestion.id,
+      code,
+      language,
+      timestamp: new Date()
+    }, { merge: true });
+
     setIsCompiling(true);
     setCheckingHidden(true);
     setLoadingOverlayMsg('Running Hidden Test Cases...');
@@ -333,7 +351,8 @@ export default function EventDashboard() {
       const endTimestamp = new Date();
       let startTimestamp = endTimestamp;
       try {
-        const snap = await getDoc(doc(db, 'user_code', `${lotNo}_${selectedQuestion.id}`));
+        const studentDb = userCategory === 'PG' ? dbPG : dbUG;
+        const snap = await getDoc(doc(studentDb, 'user_code', `${lotNo}_${selectedQuestion.id}`));
         if (snap.exists() && snap.data().startTime) {
           const st = snap.data().startTime.toDate ? snap.data().startTime.toDate() : new Date(snap.data().startTime);
           if (!isNaN(st.getTime())) startTimestamp = st;
@@ -346,7 +365,8 @@ export default function EventDashboard() {
       const durationSeconds = Math.max(1, Math.round((endTimestamp.getTime() - startTimestamp.getTime()) / 1000));
 
       setOutput(`Success! All test cases passed.\n\nExecution Output:\n${result.output}`);
-      await setDoc(doc(db, 'user_code', `${lotNo}_${selectedQuestion.id}`), {
+      const studentDb = userCategory === 'PG' ? dbPG : dbUG;
+      await setDoc(doc(studentDb, 'user_code', `${lotNo}_${selectedQuestion.id}`), {
         isSubmitted: true,
         passed: true,
         startTime: startTimestamp,
